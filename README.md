@@ -30,8 +30,8 @@ To install the RTS Game, follow these steps:
 
 1. Clone the repository: `git clone https://github.com/your-username/RTS_game.git`
 2. Navigate to the project directory: `cd RTS_game`
-3. Install the dependencies: `npm install`
-4. Start the game: `npm start`
+3. pip install pygame
+4. Start the game: `python test_all.py`
 
 ## Gameplay
 
