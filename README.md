@@ -1,6 +1,14 @@
-# RTS Game Documentation
+# Simplified RTS Game
 
-Welcome to the documentation for the RTS Game project!
+This project is a simplified real-time strategy (RTS) game developed using Python and the Pygame library. It features basic multiplayer functionality through a client-server network architecture.
+
+## Project Structure
+
+- `__pycache__/`: Python cache files.
+- `assets/`: Contains game assets divided into `buildings/` and `units/`.
+- `game.py`: Handles game logic, rendering, and state updates.
+- `main.py`: The entry point of the game. Manages game initialization and the main game loop.
+- `network/`: Contains networking code with `client.py` and `server.py`.
 
 ## Table of Contents
 
@@ -53,7 +61,3 @@ The RTS Game offers a range of exciting features, including:
 ## Contributing
 
 We welcome contributions to the RTS Game project! If you'd like to contribute, please follow our [contribution guidelines](CONTRIBUTING.md) and submit a pull request.
-
-## License
-
-The RTS Game is licensed under the [MIT License](LICENSE). Feel free to use, modify, and distribute the game as per the terms of the license.
