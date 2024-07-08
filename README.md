@@ -41,7 +41,7 @@ In the RTS Game, players take on the role of a civilization leader and must stra
 
 The game controls are as follows:
 
-- WASD or arrow keys: Pan the camera
+- arrow keys: Pan the camera
 - Scroll wheel: Zoom in/out
 - Left-click: Select units/buildings
 - Right-click: Issue commands/move units
