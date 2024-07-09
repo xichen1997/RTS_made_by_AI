@@ -1,83 +1,67 @@
 # game.py
 import pygame
-import random
-from noise import snoise2
+from map_generator import get_map, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT
 
-# 假设这些导入是正确的，如果不是，你可能需要调整
-from network import client
-
-# 地图设置
-TILE_SIZE = 32
+# 常量定义
+TILE_WIDTH = 64
+TILE_HEIGHT = 32
 MAP_WIDTH = 50
-MAP_HEIGHT = 40
+MAP_HEIGHT = 50
+# 更新SCREEN_WIDTH和SCREEN_HEIGHT以适应更大的地图
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
 
-WATER_LEVEL = 0.3
-LAND_LEVEL = 0.5
-PLATEAU_LEVEL = 0.7
+
+MINIMAP_SIZE = 150
+
+EDGE_SCROLL_MARGIN = 20
+SCROLL_SPEED = 5
 
 # 颜色定义
-BLUE = (0, 0, 255)
-GREEN = (0, 255, 0)
-BROWN = (139, 69, 19)
-RED = (255, 0, 0)
-WHITE = (255, 255, 255)
+COLORS = {
+    0: (0, 0, 255),    # 深蓝 - 水
+    1: (0, 128, 255),  # 浅蓝 - 浅水
+    2: (0, 255, 0),    # 绿色 - 平原
+    3: (0, 200, 0),    # 深绿 - 小丘
+    4: (150, 75, 0),   # 棕色 - 山丘
+    5: (100, 100, 100) # 灰色 - 高山
+}
 
-class Tile(pygame.sprite.Sprite):
-    def __init__(self, x, y, tile_type):
+class IsometricTile(pygame.sprite.Sprite):
+    def __init__(self, x, y, height):
         super().__init__()
-        self.image = pygame.Surface((TILE_SIZE, TILE_SIZE))
-        if tile_type == 'water':
-            self.image.fill(BLUE)
-        elif tile_type == 'land':
-            self.image.fill(GREEN)
-        elif tile_type == 'plateau':
-            self.image.fill(BROWN)
-        self.rect = self.image.get_rect(topleft=(x * TILE_SIZE, y * TILE_SIZE))
-        self.type = tile_type
+        self.x = x
+        self.y = y
+        self.height = height
+        self.color = COLORS[height]
+        self.image = self.create_tile_image()
+        self.rect = self.image.get_rect()
+        self.rect.x = (x - y) * TILE_WIDTH // 2
+        self.rect.y = (x + y) * TILE_HEIGHT // 2 - height * 8
 
-class Unit(pygame.sprite.Sprite):
-    def __init__(self, x, y, player):
-        super().__init__()
-        self.image = pygame.Surface((20, 20))
-        self.image.fill(RED if player == 1 else BLUE)
-        self.rect = self.image.get_rect(center=(x, y))
-        self.player = player
-        self.health = 100
-        self.attack_damage = 10
-        self.attack_cooldown = 1000
-        self.last_attack_time = pygame.time.get_ticks()
-        self.speed = 2
+    def create_tile_image(self):
+        image = pygame.Surface((TILE_WIDTH, TILE_HEIGHT + 16), pygame.SRCALPHA)
+        points = [
+            (TILE_WIDTH // 2, 0),
+            (TILE_WIDTH, TILE_HEIGHT // 2),
+            (TILE_WIDTH // 2, TILE_HEIGHT),
+            (0, TILE_HEIGHT // 2)
+        ]
+        pygame.draw.polygon(image, self.color, points)
+        pygame.draw.polygon(image, (min(self.color[0] + 50, 255), min(self.color[1] + 50, 255), min(self.color[2] + 50, 255)), 
+                            [(points[0][0], points[0][1]), 
+                             (points[1][0], points[1][1]), 
+                             (points[1][0], points[1][1] + 16), 
+                             (points[0][0], points[0][1] + 16)])
+        pygame.draw.polygon(image, (max(self.color[0] - 50, 0), max(self.color[1] - 50, 0), max(self.color[2] - 50, 0)), 
+                            [(points[1][0], points[1][1]), 
+                             (points[2][0], points[2][1]), 
+                             (points[2][0], points[2][1] + 16), 
+                             (points[1][0], points[1][1] + 16)])
+        return image
 
-    def update(self, map_tiles):
-        self.check_attack()
-        self.move_on_terrain(map_tiles)
-
-    def check_attack(self):
-        now = pygame.time.get_ticks()
-        if now - self.last_attack_time >= self.attack_cooldown:
-            enemies = [unit for unit in units if unit.player != self.player and self.rect.colliderect(unit.rect)]
-            if enemies:
-                target = enemies[0]
-                target.health -= self.attack_damage
-                self.last_attack_time = now
-                if target.health <= 0:
-                    target.kill()
-
-    def move_on_terrain(self, map_tiles):
-        terrain = pygame.sprite.spritecollide(self, map_tiles, False)[0]
-        if terrain.type == 'water':
-            self.speed = 1
-        elif terrain.type == 'land':
-            self.speed = 2
-        elif terrain.type == 'plateau':
-            self.speed = 3
-
-    def move(self, dx, dy):
-        self.rect.x += dx * self.speed
-        self.rect.y += dy * self.speed
-
-def generate_map():
-    tiles = pygame.sprite.Group()
+def generate_height_map():
+    height_map = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     scale = 10.0
     octaves = 6
     persistence = 0.5
@@ -93,128 +77,176 @@ def generate_map():
                                 octaves=octaves, 
                                 persistence=persistence, 
                                 lacunarity=lacunarity)
-            
-            if elevation < WATER_LEVEL:
-                tile_type = 'water'
-            elif elevation < LAND_LEVEL:
-                tile_type = 'land'
-            else:
-                tile_type = 'plateau'
-            
-            tile = Tile(x, y, tile_type)
-            tiles.add(tile)
-    
-    return tiles
+            height_map[y][x] = int((elevation + 1) * 2.5)  # 将值映射到0-5范围
+    return height_map
 
-units = pygame.sprite.Group()
-map_tiles = generate_map()
+class Unit(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.image = pygame.Surface((20, 20))
+        self.image.fill((255, 0, 0))  # 红色表示单位
+        self.rect = self.image.get_rect()
+        self.update_position()
 
-player_resources = {1: 1000, 2: 1000}
+    def update_position(self):
+        self.rect.x = (self.x - self.y) * TILE_WIDTH // 2 + TILE_WIDTH // 2 - 10
+        self.rect.y = (self.x + self.y) * TILE_HEIGHT // 2 - 10
 
-def update():
-    units.update(map_tiles)
-    sync_game_state_with_network()
+    def move(self, dx, dy, height_map):
+        new_x = self.x + dx
+        new_y = self.y + dy
+        if 0 <= new_x < MAP_WIDTH and 0 <= new_y < MAP_HEIGHT:
+            height_diff = abs(height_map[new_y][new_x] - height_map[self.y][self.x])
+            if height_diff <= 1:  # 允许最多1级的高度差
+                self.x = new_x
+                self.y = new_y
+                self.update_position()
 
-def render(screen):
-    map_tiles.draw(screen)
-    units.draw(screen)
-    render_hud(screen)
 
-def render_hud(screen):
-    font = pygame.font.Font(None, 36)
-    text = font.render(f"Player 1 Resources: {player_resources[1]}", True, WHITE)
-    screen.blit(text, (10, 10))
-    text = font.render(f"Player 2 Resources: {player_resources[2]}", True, WHITE)
-    screen.blit(text, (10, 50))
+class Game:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Isometric RTS")
+        self.clock = pygame.time.Clock()
+        self.map = get_map()
+        self.camera_x = 0
+        self.camera_y = 0
+        self.dragging = False
+        self.drag_start = None
+        self.zoom = 1.0
+        self.min_zoom = 0.5
+        self.max_zoom = 2.0
+        self.target_camera_x = 0
+        self.target_camera_y = 0
 
-def sync_game_state_with_network():
-    units_list = [{'x': unit.rect.x, 'y': unit.rect.y, 'player': unit.player, 'health': unit.health} for unit in units]
-    client.send_game_state(units_list)
+    def run(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                self.handle_input(event)
 
-    if client.game_state['units']:
-        existing_units = {(unit.rect.x, unit.rect.y, unit.player): unit for unit in units}
-        for unit_data in client.game_state['units']:
-            key = (unit_data['x'], unit_data['y'], unit_data['player'])
-            if key in existing_units:
-                unit = existing_units[key]
-                unit.health = unit_data['health']
-            else:
-                unit = Unit(unit_data['x'], unit_data['y'], unit_data['player'])
-                unit.health = unit_data['health']
-                units.add(unit)
+            self.update()
+            self.render()
+            pygame.display.flip()
+            self.clock.tick(60)
 
-def spawn_unit(player):
-    x, y = random.randint(100, 700), random.randint(100, 500)
-    unit = Unit(x, y, player)
-    units.add(unit)
-    return unit
+    def handle_input(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 2:  # Middle mouse button
+                self.dragging = True
+                self.drag_start = event.pos
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 2:  # Middle mouse button
+                self.dragging = False
+        elif event.type == pygame.MOUSEMOTION:
+            if self.dragging:
+                dx = event.pos[0] - self.drag_start[0]
+                dy = event.pos[1] - self.drag_start[1]
+                self.camera_x += dx
+                self.camera_y += dy
+                self.drag_start = event.pos
+        if event.type == pygame.MOUSEWHEEL:
+            # 缩放功能
+            zoom_speed = 0.1
+            self.zoom += event.y * zoom_speed
+            self.zoom = max(min(self.zoom, self.max_zoom), self.min_zoom)
 
+    def update(self):
+        mouse_pos = pygame.mouse.get_pos()
+        keys = pygame.key.get_pressed()
+
+        # 更新目标相机位置
+        if mouse_pos[0] < EDGE_SCROLL_MARGIN:
+            self.target_camera_x += SCROLL_SPEED
+        elif mouse_pos[0] > SCREEN_WIDTH - EDGE_SCROLL_MARGIN:
+            self.target_camera_x -= SCROLL_SPEED
+        if mouse_pos[1] < EDGE_SCROLL_MARGIN:
+            self.target_camera_y += SCROLL_SPEED
+        elif mouse_pos[1] > SCREEN_HEIGHT - EDGE_SCROLL_MARGIN:
+            self.target_camera_y -= SCROLL_SPEED
+
+        # 键盘滚动
+        if keys[pygame.K_LEFT]:
+            self.target_camera_x += SCROLL_SPEED
+        elif keys[pygame.K_RIGHT]:
+            self.target_camera_x -= SCROLL_SPEED
+        if keys[pygame.K_UP]:
+            self.target_camera_y += SCROLL_SPEED
+        elif keys[pygame.K_DOWN]:
+            self.target_camera_y -= SCROLL_SPEED
+
+        # 限制相机移动
+        max_x = 0
+        max_y = 0
+        min_x = -(MAP_WIDTH * TILE_SIZE * self.zoom - SCREEN_WIDTH)
+        min_y = -(MAP_HEIGHT * TILE_SIZE * self.zoom - SCREEN_HEIGHT)
+        self.target_camera_x = max(min(self.target_camera_x, max_x), min_x)
+        self.target_camera_y = max(min(self.target_camera_y, max_y), min_y)
+
+        # 平滑过渡
+        lerp_factor = 0.1
+        self.camera_x += (self.target_camera_x - self.camera_x) * lerp_factor
+        self.camera_y += (self.target_camera_y - self.camera_y) * lerp_factor
+
+    def render(self):
+        self.screen.fill((0, 0, 0))  # Clear the screen
+        self.minimap_surface = pygame.Surface((MINIMAP_SIZE, MINIMAP_SIZE))
+
+        # 计算缩放后的瓦片大小
+        scaled_tile_size = int(TILE_SIZE * self.zoom)
+
+        # 计算可见区域
+        start_x = max(0, int(-self.camera_x / scaled_tile_size))
+        end_x = min(MAP_WIDTH, int((-self.camera_x + SCREEN_WIDTH) / scaled_tile_size) + 1)
+        start_y = max(0, int(-self.camera_y / scaled_tile_size))
+        end_y = min(MAP_HEIGHT, int((-self.camera_y + SCREEN_HEIGHT) / scaled_tile_size) + 1)
+
+        # 只渲染可见的瓦片
+        for y in range(start_y, end_y):
+            for x in range(start_x, end_x):
+                tile = self.map[y][x]
+                scaled_image = pygame.transform.scale(tile.image, (scaled_tile_size, scaled_tile_size))
+                self.screen.blit(scaled_image, (
+                    x * scaled_tile_size + self.camera_x,
+                    y * scaled_tile_size + self.camera_y
+                ))
+        self.render_minimap()
+
+
+    def render_minimap(self):
+        self.minimap_surface.fill((0, 0, 0))
+        minimap_tile_size = MINIMAP_SIZE / max(MAP_WIDTH, MAP_HEIGHT)
+
+        for y in range(MAP_HEIGHT):
+            for x in range(MAP_WIDTH):
+                tile = self.map[y][x]
+                color = tile.image.get_at((0, 0))  # 获取瓦片的颜色
+                pygame.draw.rect(self.minimap_surface, color, (
+                    x * minimap_tile_size,
+                    y * minimap_tile_size,
+                    minimap_tile_size,
+                    minimap_tile_size
+                ))
+
+        # 绘制当前视图区域
+        view_rect = pygame.Rect(
+            -self.camera_x / (TILE_SIZE * self.zoom) * minimap_tile_size,
+            -self.camera_y / (TILE_SIZE * self.zoom) * minimap_tile_size,
+            SCREEN_WIDTH / (TILE_SIZE * self.zoom) * minimap_tile_size,
+            SCREEN_HEIGHT / (TILE_SIZE * self.zoom) * minimap_tile_size
+        )
+        pygame.draw.rect(self.minimap_surface, (255, 0, 0), view_rect, 1)
+
+        # 将小地图绘制到主屏幕
+        self.screen.blit(self.minimap_surface, (SCREEN_WIDTH - MINIMAP_SIZE - 10, 10))
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((800, 600))
-    pygame.display.set_caption("RTS Game")
-    clock = pygame.time.Clock()
-
-    camera_x, camera_y = 0, 0
-    selected_unit = None
-
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1:
-                    if client.player == 1 and player_resources[1] >= 100:
-                        player_resources[1] -= 100
-                        selected_unit = spawn_unit(client.player)
-                    elif client.player == 2 and player_resources[2] >= 100:
-                        player_resources[2] -= 100
-                        selected_unit = spawn_unit(client.player)
-                elif event.key in [pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT]:
-                    if selected_unit:
-                        if event.key == pygame.K_UP:
-                            selected_unit.move(0, -1)
-                        elif event.key == pygame.K_DOWN:
-                            selected_unit.move(0, 1)
-                        elif event.key == pygame.K_LEFT:
-                            selected_unit.move(-1, 0)
-                        elif event.key == pygame.K_RIGHT:
-                            selected_unit.move(1, 0)
-
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_a]:
-            camera_x = max(camera_x - 5, 0)
-        if keys[pygame.K_d]:
-            camera_x = min(camera_x + 5, MAP_WIDTH * TILE_SIZE - 800)
-        if keys[pygame.K_w]:
-            camera_y = max(camera_y - 5, 0)
-        if keys[pygame.K_s]:
-            camera_y = min(camera_y + 5, MAP_HEIGHT * TILE_SIZE - 600)
-
-        update()
-
-        screen.fill((0, 0, 0))
-
-        for sprite in map_tiles:
-            sprite.rect.x = sprite.rect.x - camera_x
-            sprite.rect.y = sprite.rect.y - camera_y
-        for unit in units:
-            unit.rect.x = unit.rect.x - camera_x
-            unit.rect.y = unit.rect.y - camera_y
-
-        render(screen)
-
-        for sprite in map_tiles:
-            sprite.rect.x = sprite.rect.x + camera_x
-            sprite.rect.y = sprite.rect.y + camera_y
-        for unit in units:
-            unit.rect.x = unit.rect.x + camera_x
-            unit.rect.y = unit.rect.y + camera_y
-
-        pygame.display.flip()
-        clock.tick(60)
-
+    game = Game()
+    game.run()
     pygame.quit()
 
 if __name__ == "__main__":
