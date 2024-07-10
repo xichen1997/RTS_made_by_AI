@@ -1,7 +1,6 @@
 # game.py
 import pygame
-from map_generator import get_map, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT
-
+from map_generator import get_map, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, CHUNK_SIZE, TERRAIN_TYPES
 # 常量定义
 TILE_WIDTH = 64
 TILE_HEIGHT = 32
@@ -12,7 +11,7 @@ SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 
 
-MINIMAP_SIZE = 150
+MINIMAP_SIZE = 200
 
 EDGE_SCROLL_MARGIN = 20
 SCROLL_SPEED = 5
@@ -128,6 +127,8 @@ class Game:
                 if event.type == pygame.QUIT:
                     running = False
                 self.handle_input(event)
+                print(f"Camera position: ({self.camera_x}, {self.camera_y})")
+                print(f"Zoom level: {self.zoom}")
 
             self.update()
             self.render()
@@ -136,20 +137,21 @@ class Game:
 
     def handle_input(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 2:  # Middle mouse button
+            if event.button == 2:  # 鼠标中键
                 self.dragging = True
-                self.drag_start = event.pos
+                self.last_mouse_pos = pygame.mouse.get_pos()
         elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 2:  # Middle mouse button
+            if event.button == 2:  # 鼠标中键
                 self.dragging = False
         elif event.type == pygame.MOUSEMOTION:
             if self.dragging:
-                dx = event.pos[0] - self.drag_start[0]
-                dy = event.pos[1] - self.drag_start[1]
-                self.camera_x += dx
-                self.camera_y += dy
-                self.drag_start = event.pos
-        if event.type == pygame.MOUSEWHEEL:
+                current_mouse_pos = pygame.mouse.get_pos()
+                dx = current_mouse_pos[0] - self.last_mouse_pos[0]
+                dy = current_mouse_pos[1] - self.last_mouse_pos[1]
+                self.target_camera_x += dx
+                self.target_camera_y += dy
+                self.last_mouse_pos = current_mouse_pos
+        elif event.type == pygame.MOUSEWHEEL:
             # 缩放功能
             zoom_speed = 0.1
             self.zoom += event.y * zoom_speed
@@ -200,50 +202,80 @@ class Game:
         scaled_tile_size = int(TILE_SIZE * self.zoom)
 
         # 计算可见区域
-        start_x = max(0, int(-self.camera_x / scaled_tile_size))
-        end_x = min(MAP_WIDTH, int((-self.camera_x + SCREEN_WIDTH) / scaled_tile_size) + 1)
-        start_y = max(0, int(-self.camera_y / scaled_tile_size))
-        end_y = min(MAP_HEIGHT, int((-self.camera_y + SCREEN_HEIGHT) / scaled_tile_size) + 1)
+        visible_tiles = self.map.get_visible_tiles(
+            int(-self.camera_x / self.zoom), 
+            int(-self.camera_y / self.zoom), 
+            int(SCREEN_WIDTH / self.zoom), 
+            int(SCREEN_HEIGHT / self.zoom)
+        )
 
-        # 只渲染可见的瓦片
-        for y in range(start_y, end_y):
-            for x in range(start_x, end_x):
-                tile = self.map[y][x]
-                scaled_image = pygame.transform.scale(tile.image, (scaled_tile_size, scaled_tile_size))
-                self.screen.blit(scaled_image, (
-                    x * scaled_tile_size + self.camera_x,
-                    y * scaled_tile_size + self.camera_y
-                ))
+        for tile in visible_tiles:
+            scaled_image = pygame.transform.scale(tile.image, (scaled_tile_size, scaled_tile_size))
+            self.screen.blit(scaled_image, (
+                int(tile.x * scaled_tile_size + self.camera_x),
+                int(tile.y * scaled_tile_size + self.camera_y)
+            ))
+
         self.render_minimap()
 
-
     def render_minimap(self):
-        self.minimap_surface.fill((0, 0, 0))
-        minimap_tile_size = MINIMAP_SIZE / max(MAP_WIDTH, MAP_HEIGHT)
+        print("Rendering minimap...")
+        self.minimap_surface = pygame.Surface((MINIMAP_SIZE, MINIMAP_SIZE))
+        self.minimap_surface.fill((50, 50, 50))  # 深灰色背景
+        minimap_tile_size = max(1, MINIMAP_SIZE / max(MAP_WIDTH, MAP_HEIGHT))
 
-        for y in range(MAP_HEIGHT):
-            for x in range(MAP_WIDTH):
-                tile = self.map[y][x]
-                color = tile.image.get_at((0, 0))  # 获取瓦片的颜色
-                pygame.draw.rect(self.minimap_surface, color, (
-                    x * minimap_tile_size,
-                    y * minimap_tile_size,
-                    minimap_tile_size,
-                    minimap_tile_size
-                ))
+        print(f"Minimap tile size: {minimap_tile_size}")
+        print(f"MAP_WIDTH: {MAP_WIDTH}, MAP_HEIGHT: {MAP_HEIGHT}, CHUNK_SIZE: {CHUNK_SIZE}")
+        colors_used = set()
+
+        chunks_x = max(1, MAP_WIDTH // CHUNK_SIZE)
+        chunks_y = max(1, MAP_HEIGHT // CHUNK_SIZE)
+        print(f"Chunks to render: {chunks_x} x {chunks_y}")
+
+        for chunk_y in range(chunks_y):
+            for chunk_x in range(chunks_x):
+                print(f"Rendering chunk ({chunk_x}, {chunk_y})")
+                chunk = self.map.get_chunk(chunk_x, chunk_y)
+                for y in range(CHUNK_SIZE):
+                    for x in range(CHUNK_SIZE):
+                        tile = chunk[y][x]
+                        if tile is None:
+                            print(f"Tile at ({x}, {y}) in chunk ({chunk_x}, {chunk_y}) is None")
+                            continue
+                        color = TERRAIN_TYPES[tile.type]
+                        colors_used.add(color)
+                        pygame.draw.rect(self.minimap_surface, color, (
+                            int((chunk_x * CHUNK_SIZE + x) * minimap_tile_size),
+                            int((chunk_y * CHUNK_SIZE + y) * minimap_tile_size),
+                            max(1, int(minimap_tile_size)),
+                            max(1, int(minimap_tile_size))
+                        ))
+
+        print(f"Colors used in minimap: {colors_used}")
+        print(f"Total chunks rendered: {chunks_x * chunks_y}")
 
         # 绘制当前视图区域
         view_rect = pygame.Rect(
-            -self.camera_x / (TILE_SIZE * self.zoom) * minimap_tile_size,
-            -self.camera_y / (TILE_SIZE * self.zoom) * minimap_tile_size,
-            SCREEN_WIDTH / (TILE_SIZE * self.zoom) * minimap_tile_size,
-            SCREEN_HEIGHT / (TILE_SIZE * self.zoom) * minimap_tile_size
+            int(-self.camera_x / (TILE_SIZE * self.zoom) * minimap_tile_size),
+            int(-self.camera_y / (TILE_SIZE * self.zoom) * minimap_tile_size),
+            max(1, int(SCREEN_WIDTH / (TILE_SIZE * self.zoom) * minimap_tile_size)),
+            max(1, int(SCREEN_HEIGHT / (TILE_SIZE * self.zoom) * minimap_tile_size))
         )
         pygame.draw.rect(self.minimap_surface, (255, 0, 0), view_rect, 1)
 
         # 将小地图绘制到主屏幕
-        self.screen.blit(self.minimap_surface, (SCREEN_WIDTH - MINIMAP_SIZE - 10, 10))
+        minimap_pos = (SCREEN_WIDTH - MINIMAP_SIZE - 10, 10)
+        self.screen.blit(self.minimap_surface, minimap_pos)
+
+        # 添加边框以使小地图更容易看见
+        pygame.draw.rect(self.screen, (255, 255, 255), (*minimap_pos, MINIMAP_SIZE, MINIMAP_SIZE), 2)
+
+        print(f"Minimap drawn at position: {minimap_pos}, size: {MINIMAP_SIZE}x{MINIMAP_SIZE}")
+
 def main():
+    print(f"MAP_WIDTH: {MAP_WIDTH}")
+    print(f"MAP_HEIGHT: {MAP_HEIGHT}")
+    print(f"CHUNK_SIZE: {CHUNK_SIZE}")
     pygame.init()
     game = Game()
     game.run()
