@@ -3,22 +3,24 @@ import pygame
 import random
 from noise import snoise2
 import threading
+import noise
 
 TILE_SIZE = 32
-MAP_WIDTH = 2500
-MAP_HEIGHT = 2500
-CHUNK_SIZE = 50
+MAP_WIDTH = 5000
+MAP_HEIGHT = 5000
+CHUNK_SIZE = 5
 
 
 TERRAIN_TYPES = {
-    'deep_water': (0, 0, 139),
-    'shallow_water': (0, 191, 255),
-    'sand': (238, 214, 175),
-    'grass': (34, 139, 34),
-    'forest': (0, 100, 0),
-    'mountain': (139, 137, 137)
+    'deep_water': (0, 0, 139),    # 深蓝
+    'shallow_water': (65, 105, 225),  # 蓝色
+    'beach': (238, 214, 175),      # 浅棕
+    'grassland': (34, 139, 34),    # 绿色
+    'forest': (0, 100, 0),         # 深绿
+    'hills': (160, 82, 45),        # 赭石色
+    'mountains': (139, 137, 137),  # 灰色
+    'snow_peaks': (255, 250, 250)  # 雪白
 }
-
 class Tile(pygame.sprite.Sprite):
     def __init__(self, x, y, terrain_type):
         super().__init__()
@@ -48,37 +50,39 @@ class MapGenerator:
 
     def generate_chunk(self, chunk_x, chunk_y):
         chunk = [[None for _ in range(CHUNK_SIZE)] for _ in range(CHUNK_SIZE)]
-        scale = 50.0
-        octaves = 6
-        persistence = 0.5
-        lacunarity = 2.0
+        
+        base_x = chunk_x * CHUNK_SIZE
+        base_y = chunk_y * CHUNK_SIZE
         
         for y in range(CHUNK_SIZE):
             for x in range(CHUNK_SIZE):
-                world_x = chunk_x * CHUNK_SIZE + x
-                world_y = chunk_y * CHUNK_SIZE + y
-                nx = world_x / MAP_WIDTH - 0.5
-                ny = world_y / MAP_HEIGHT - 0.5
-                elevation = snoise2(nx * scale + self.seed, 
-                                    ny * scale + self.seed, 
-                                    octaves=octaves, 
-                                    persistence=persistence, 
-                                    lacunarity=lacunarity)
+                world_x = base_x + x
+                world_y = base_y + y
                 
-                if elevation < -0.2:
-                    terrain_type = 'deep_water'
+                # 使用多层噪声
+                elevation = noise.snoise2(world_x / 100, world_y / 100, octaves=6, persistence=0.5, lacunarity=2.0, repeatx=1024, repeaty=1024, base=self.seed)
+                moisture = noise.snoise2(world_x / 50, world_y / 50, octaves=4, persistence=0.6, lacunarity=2.0, repeatx=1024, repeaty=1024, base=self.seed + 1)
+                
+                # 根据高度和湿度确定地形
+                if elevation < -0.3:
+                    terrain = 'deep_water'
+                elif elevation < -0.1:
+                    terrain = 'shallow_water'
                 elif elevation < 0:
-                    terrain_type = 'shallow_water'
-                elif elevation < 0.1:
-                    terrain_type = 'sand'
+                    terrain = 'beach'
                 elif elevation < 0.3:
-                    terrain_type = 'grass'
+                    if moisture < 0:
+                        terrain = 'grassland'
+                    else:
+                        terrain = 'forest'
                 elif elevation < 0.6:
-                    terrain_type = 'forest'
+                    terrain = 'hills'
+                elif elevation < 0.8:
+                    terrain = 'mountains'
                 else:
-                    terrain_type = 'mountain'
+                    terrain = 'snow_peaks'
                 
-                chunk[y][x] = Tile(world_x, world_y, terrain_type)
+                chunk[y][x] = Tile(world_x, world_y, terrain)
         
         return chunk
 

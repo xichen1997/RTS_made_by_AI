@@ -234,16 +234,16 @@ class Game:
 
         for chunk_y in range(chunks_y):
             for chunk_x in range(chunks_x):
-                print(f"Rendering chunk ({chunk_x}, {chunk_y})")
                 chunk = self.map.get_chunk(chunk_x, chunk_y)
                 for y in range(CHUNK_SIZE):
                     for x in range(CHUNK_SIZE):
                         tile = chunk[y][x]
-                        if tile is None:
-                            print(f"Tile at ({x}, {y}) in chunk ({chunk_x}, {chunk_y}) is None")
-                            continue
-                        color = TERRAIN_TYPES[tile.type]
-                        colors_used.add(color)
+                        base_color = TERRAIN_TYPES[tile.type]
+                        
+                        # 添加高度渐变
+                        elevation = (tile.x + tile.y) / (MAP_WIDTH + MAP_HEIGHT)  # 简化的高度计算
+                        color = tuple(max(0, min(255, c + int(elevation * 50))) for c in base_color)
+                        
                         pygame.draw.rect(self.minimap_surface, color, (
                             int((chunk_x * CHUNK_SIZE + x) * minimap_tile_size),
                             int((chunk_y * CHUNK_SIZE + y) * minimap_tile_size),
