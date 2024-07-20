@@ -1,4 +1,4 @@
-# RTS Game Developer Documentation
+# RTS Game Developer Documentations
 
 Welcome to the RTS Game project! This document serves as a guide for developers looking to contribute to this simplified real-time strategy (RTS) game developed using Python and the Pygame library. The game features basic multiplayer functionality through a client-server network architecture.
 
