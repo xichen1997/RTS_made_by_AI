@@ -1,63 +1,54 @@
-# Simplified RTS Game
+# RTS Game Developer Documentation
 
-This project is a simplified real-time strategy (RTS) game developed using Python and the Pygame library. It features basic multiplayer functionality through a client-server network architecture.
-
-## Project Structure
-
-- `__pycache__/`: Python cache files.
-- `assets/`: Contains game assets divided into `buildings/` and `units/`.
-- `game.py`: Handles game logic, rendering, and state updates.
-- `main.py`: The entry point of the game. Manages game initialization and the main game loop.
-- `network/`: Contains networking code with `client.py` and `server.py`.
+Welcome to the RTS Game project! This document serves as a guide for developers looking to contribute to this simplified real-time strategy (RTS) game developed using Python and the Pygame library. The game features basic multiplayer functionality through a client-server network architecture.
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Installation](#installation)
-3. [Gameplay](#gameplay)
-4. [Controls](#controls)
-5. [Features](#features)
-6. [Contributing](#contributing)
-7. [License](#license)
+- [Project Overview](#project-overview)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Development Guidelines](#development-guidelines)
+- [Contributing](#contributing)
+- [License](#license)
 
-## Introduction
+## Project Overview
 
 The RTS Game is a real-time strategy game where players build and manage their own virtual civilizations. It offers a rich and immersive gaming experience, allowing players to explore, expand, exploit, and exterminate in a dynamic and ever-changing world.
 
-## Installation
+## Getting Started
 
-To install the RTS Game, follow these steps:
+To get started with development, follow these steps:
 
 1. Clone the repository: `git clone https://github.com/your-username/RTS_game.git`
 2. Navigate to the project directory: `cd RTS_game`
-3. pip install pygame
-4. Start the game: `python test_all.py`
+3. Install dependencies: `pip install pygame noise`
+4. Start the game: `python main.py`
 
-## Gameplay
+## Project Structure
 
-In the RTS Game, players take on the role of a civilization leader and must strategically manage resources, build structures, train units, and engage in battles with other players or AI-controlled opponents. The goal is to expand your civilization, conquer territories, and emerge as the dominant force in the game world.
+The project is organized as follows:
 
-## Controls
+- `__pycache__/`: Python cache files.
+- `game.py`: Handles game logic, rendering, and state updates.
+- `main.py`: The entry point of the game. Manages game initialization and the main game loop.
+- `map_generator.py`: Responsible for generating the game map and managing terrain.
+- `network/`: Contains networking code with `client.py` and `server.py` for multiplayer functionality.
+- `README.md`: Project documentation.
+- `test_all.py`: Script for running all tests.
 
-The game controls are as follows:
+## Development Guidelines
 
-- arrow keys: Pan the camera
-- Scroll wheel: Zoom in/out
-- Left-click: Select units/buildings
-- Right-click: Issue commands/move units
-- Spacebar: Pause/unpause the game
+When developing for the RTS Game, please adhere to the following guidelines:
 
-## Features
-
-The RTS Game offers a range of exciting features, including:
-
-- Procedurally generated maps
-- Multiple civilizations to choose from
-- Research and technology tree
-- Diplomacy and trade options
-- Customizable units and buildings
-- Multiplayer support
+- **Code Style**: Follow PEP 8 style guide for Python code.
+- **Commit Messages**: Use clear and descriptive commit messages.
+- **Testing**: Write tests for new features and bug fixes when possible.
+- **Documentation**: Update the README.md and inline documentation as needed.
 
 ## Contributing
 
-We welcome contributions to the RTS Game project! If you'd like to contribute, please follow our [contribution guidelines](CONTRIBUTING.md) and submit a pull request.
+We welcome contributions to the RTS Game project! If you'd like to contribute, please follow our contribution guidelines and submit a pull request. For more details, refer to the [Contributing](#contributing) section of the main README.md.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for more details.
