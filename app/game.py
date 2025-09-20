@@ -365,12 +365,12 @@ class RTSGame:
         base_center = Vector2(spawn[0], spawn[1])
         layout = [
             ("construction_yard", base_center.copy()),
-            ("power_plant", Vector2(base_center.x + 6, base_center.y - 4)),
-            ("ore_refinery", Vector2(base_center.x - 6, base_center.y + 4)),
-            ("barracks", Vector2(base_center.x + 8, base_center.y + 6)),
-            ("war_factory", Vector2(base_center.x + 14, base_center.y + 2)),
-            ("airforce_command", Vector2(base_center.x - 4, base_center.y + 10)),
-            ("prism_tower", Vector2(base_center.x + 4, base_center.y + 12)),
+            ("power_plant", Vector2(base_center.x + 22, base_center.y - 18)),
+            ("ore_refinery", Vector2(base_center.x - 28, base_center.y + 14)),
+            ("barracks", Vector2(base_center.x + 24, base_center.y + 18)),
+            ("war_factory", Vector2(base_center.x - 26, base_center.y - 16)),
+            ("airforce_command", Vector2(base_center.x, base_center.y + 28)),
+            ("prism_tower", Vector2(base_center.x + 30, base_center.y + 2)),
         ]
 
         buildings_by_kind: Dict[str, Building] = {}

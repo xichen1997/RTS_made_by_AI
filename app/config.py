@@ -1,7 +1,7 @@
 """Configuration constants for the RTS web application."""
 
-MAP_WIDTH = 96
-MAP_HEIGHT = 64
+MAP_WIDTH = 160
+MAP_HEIGHT = 120
 TICK_RATE = 10  # ticks per second
 STATE_BROADCAST_RATE = 10  # snapshots per second
 MAX_PLAYERS_PER_ROOM = 4
@@ -131,15 +131,15 @@ BUILDING_STATS = {
 
 # Spawn positions arranged clockwise starting from bottom-left.
 SPAWN_POSITIONS = [
-    (10.0, 10.0),
-    (MAP_WIDTH - 10.0, MAP_HEIGHT - 10.0),
-    (10.0, MAP_HEIGHT - 10.0),
-    (MAP_WIDTH - 10.0, 10.0),
+    (36.0, 36.0),
+    (MAP_WIDTH - 36.0, MAP_HEIGHT - 36.0),
+    (36.0, MAP_HEIGHT - 36.0),
+    (MAP_WIDTH - 36.0, 36.0),
 ]
 
 RESOURCE_NODE_POSITIONS = [
-    (MAP_WIDTH / 2, MAP_HEIGHT / 2),
-    (MAP_WIDTH / 2 + 15, MAP_HEIGHT / 2 - 12),
-    (MAP_WIDTH / 2 - 20, MAP_HEIGHT / 2 + 16),
-    (MAP_WIDTH / 2 + 5, MAP_HEIGHT / 2 + 18),
+    (MAP_WIDTH / 2 - 20, MAP_HEIGHT / 2 - 10),
+    (MAP_WIDTH / 2 + 26, MAP_HEIGHT / 2 + 18),
+    (MAP_WIDTH / 2 - 34, MAP_HEIGHT / 2 + 26),
+    (MAP_WIDTH / 2 + 14, MAP_HEIGHT / 2 - 30),
 ]
