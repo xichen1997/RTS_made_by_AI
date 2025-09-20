@@ -152,6 +152,47 @@ canvas#battlefield {
   border-color: var(--accent);
 }
 
+.button-grid button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #1f2937;
+  box-shadow: none;
+}
+
+.button-grid button strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.button-grid button .meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.button-grid button .desc {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.queue {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: #0f172a;
+  border-radius: 0.4rem;
+  border: 1px solid #1f2937;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.queue strong {
+  color: var(--text);
+}
+
 .panel ul {
   padding-left: 1.2rem;
   color: var(--muted);

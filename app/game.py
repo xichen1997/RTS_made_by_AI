@@ -20,6 +20,12 @@ from .models import (
 )
 
 
+def _format_name(identifier: str) -> str:
+    """Return a player-facing version of an internal identifier."""
+
+    return identifier.replace("_", " ").title()
+
+
 PLAYER_COLORS = ["#3cb44b", "#0082c8", "#f58231", "#911eb4"]
 
 
@@ -153,7 +159,7 @@ class RTSGame:
             ProductionTask(unit_type=unit_type, remaining=stats["build_time"])
         )
         self.add_event(
-            f"{player.name} queued a {unit_type} at {building.kind.upper()}"
+            f"{player.name} queued a {_format_name(unit_type)} at {_format_name(building.kind)}"
         )
 
     # ------------------------------------------------------------------
@@ -182,7 +188,7 @@ class RTSGame:
             owner.units[unit.id] = unit
             self.units[unit.id] = unit
             self.add_event(
-                f"{owner.name} produced a {task.unit_type} at {building.kind.upper()}"
+                f"{owner.name} produced a {_format_name(task.unit_type)} at {_format_name(building.kind)}"
             )
 
     def _update_units(self, dt: float) -> None:
@@ -311,6 +317,7 @@ class RTSGame:
                 "hp": building.hp,
                 "max_hp": building.max_hp,
                 "queue": [task.unit_type for task in building.production_queue],
+                "buildable_units": list(building.buildable_units),
             }
             for building in self.buildings.values()
         ]
@@ -355,22 +362,40 @@ class RTSGame:
             )
 
     def _spawn_starting_base(self, player: PlayerState, spawn: Tuple[float, float]) -> None:
-        hq = self._spawn_building(player, "hq", Vector2(spawn[0], spawn[1]))
-        factory_offset = Vector2(spawn[0] + 4, spawn[1] + 4)
-        factory = self._spawn_building(player, "factory", factory_offset)
-        player.buildings[hq.id] = hq
-        player.buildings[factory.id] = factory
-        self.buildings[hq.id] = hq
-        self.buildings[factory.id] = factory
+        conyard = self._spawn_building(
+            player, "construction_yard", self._clamp_position(spawn[0], spawn[1])
+        )
+        refinery = self._spawn_building(
+            player, "ore_refinery", self._clamp_position(spawn[0] + 6, spawn[1] + 2)
+        )
+        barracks = self._spawn_building(
+            player, "barracks", self._clamp_position(spawn[0] - 6, spawn[1] + 4)
+        )
+        war_factory = self._spawn_building(
+            player, "war_factory", self._clamp_position(spawn[0] + 10, spawn[1] + 6)
+        )
 
-        # Initial army
-        for _ in range(2):
-            soldier = self._spawn_unit(player, "soldier", near=factory.position)
-            player.units[soldier.id] = soldier
-            self.units[soldier.id] = soldier
-        harvester = self._spawn_unit(player, "harvester", near=hq.position)
-        player.units[harvester.id] = harvester
-        self.units[harvester.id] = harvester
+        for building in (conyard, refinery, barracks, war_factory):
+            player.buildings[building.id] = building
+            self.buildings[building.id] = building
+
+        # Initial forces
+        for _ in range(3):
+            conscript = self._spawn_unit(player, "conscript", near=barracks.position)
+            player.units[conscript.id] = conscript
+            self.units[conscript.id] = conscript
+
+        gi = self._spawn_unit(player, "gi", near=barracks.position)
+        player.units[gi.id] = gi
+        self.units[gi.id] = gi
+
+        grizzly = self._spawn_unit(player, "grizzly_tank", near=war_factory.position)
+        player.units[grizzly.id] = grizzly
+        self.units[grizzly.id] = grizzly
+
+        miner = self._spawn_unit(player, "ore_miner", near=refinery.position)
+        player.units[miner.id] = miner
+        self.units[miner.id] = miner
 
     def _spawn_building(
         self, player: PlayerState, kind: str, position: Vector2
@@ -392,20 +417,27 @@ class RTSGame:
     ) -> Unit:
         stats = config.UNIT_STATS[unit_type]
         jitter = Vector2(near.x + 1.5 - (3.0 * (uuid.uuid4().int % 100) / 100.0), near.y)
+        spawn_position = self._clamp_position(jitter.x, jitter.y)
         unit = Unit(
             id=f"unit_{uuid.uuid4().hex[:8]}",
             owner_id=player.player_id,
             kind=unit_type,
-            position=jitter,
+            position=spawn_position,
             max_hp=stats["max_hp"],
             hp=stats["max_hp"],
             speed=stats["speed"],
             attack_damage=stats["attack_damage"],
             attack_range=stats["attack_range"],
             attack_cooldown=stats["attack_cooldown"],
-            role="harvester" if unit_type == "harvester" else "combat",
+            role=stats.get("role", "combat"),
         )
         return unit
+
+    def _clamp_position(self, x: float, y: float) -> Vector2:
+        margin = 4.0
+        clamped_x = max(margin, min(x, config.MAP_WIDTH - margin))
+        clamped_y = max(margin, min(y, config.MAP_HEIGHT - margin))
+        return Vector2(clamped_x, clamped_y)
 
     def add_event(self, message: str) -> None:
         self.events.append(message)

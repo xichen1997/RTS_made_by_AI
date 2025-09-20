@@ -8,7 +8,49 @@ const statusLabel = document.getElementById("status-indicator");
 const resourceDisplay = document.getElementById("resource-display");
 const eventLog = document.getElementById("event-log");
 const tooltip = document.getElementById("tooltip");
-const productionButtons = document.querySelectorAll("[data-unit]");
+const productionButtonsContainer = document.getElementById("production-buttons");
+const productionHint = document.getElementById("production-hint");
+const productionQueue = document.getElementById("production-queue");
+
+const UNIT_CATALOG = {
+  ore_miner: {
+    name: "Ore Miner",
+    description: "Resource vehicle. Harvests ore fields to generate credits.",
+    cost: 1200,
+  },
+  conscript: {
+    name: "Conscript",
+    description: "Soviet rifle infantry. Cheap and expendable attacker.",
+    cost: 100,
+  },
+  gi: {
+    name: "G.I.",
+    description: "Allied anti-armor infantry with solid range.",
+    cost: 200,
+  },
+  grizzly_tank: {
+    name: "Grizzly Tank",
+    description: "Versatile Allied battle tank with balanced stats.",
+    cost: 700,
+  },
+  prism_tank: {
+    name: "Prism Tank",
+    description: "Long-range artillery vehicle with devastating beams.",
+    cost: 1200,
+  },
+  mirage_tank: {
+    name: "Mirage Tank",
+    description: "Advanced stealth tank. High damage versus armor.",
+    cost: 1000,
+  },
+};
+
+const BUILDING_NAMES = {
+  construction_yard: "Construction Yard",
+  ore_refinery: "Ore Refinery",
+  barracks: "Barracks",
+  war_factory: "War Factory",
+};
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -53,6 +95,7 @@ initializeMapGeometry();
 resizeRendererToDisplaySize();
 configureCamera();
 animate();
+updateProductionPanel();
 
 connectBtn.addEventListener("click", () => {
   if (socket) {
@@ -63,22 +106,22 @@ connectBtn.addEventListener("click", () => {
   openSocket(roomId, name);
 });
 
-productionButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      pushEvent("Connect to a room before issuing production commands.");
-      return;
-    }
-    if (!selectedBuilding) {
-      pushEvent("Select your HQ or Factory to train units.");
-      return;
-    }
-    const unitType = button.dataset.unit;
-    sendCommand({
-      action: "build_unit",
-      building_id: selectedBuilding,
-      unit_type: unitType,
-    });
+productionButtonsContainer.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-unit]");
+  if (!button) return;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    pushEvent("Connect to a room before issuing production commands.");
+    return;
+  }
+  if (!selectedBuilding) {
+    pushEvent("Select a structure to issue production orders.");
+    return;
+  }
+  const unitType = button.dataset.unit;
+  sendCommand({
+    action: "build_unit",
+    building_id: selectedBuilding,
+    unit_type: unitType,
   });
 });
 
@@ -249,6 +292,7 @@ function openSocket(room, name) {
       }
       updateEventLog(gameState.events || []);
       syncScene();
+      updateProductionPanel();
     } else if (message.type === "event") {
       pushEvent(message.message);
     }
@@ -260,6 +304,7 @@ function openSocket(room, name) {
     playerId = null;
     selectedUnits.clear();
     selectedBuilding = null;
+    updateProductionPanel();
   });
 }
 
@@ -274,6 +319,7 @@ function handleSelection(picked, additive) {
     selectedBuilding = null;
   }
   if (!picked) {
+    updateProductionPanel();
     return;
   }
   if (picked.owner === playerId && picked.kind === "unit") {
@@ -285,6 +331,7 @@ function handleSelection(picked, additive) {
   } else if (picked.owner === playerId && picked.kind === "building") {
     selectedBuilding = picked.id;
   }
+  updateProductionPanel();
 }
 
 function handleCommand(target, groundPoint) {
@@ -443,11 +490,12 @@ function updateUnitMesh(mesh, unit) {
   mesh.position.set(ux, height / 2, uy);
   mesh.material.color.set(getPlayerColor(unit.owner));
   mesh.userData.owner = unit.owner;
-  mesh.userData.label = `${unit.type.toUpperCase()} (${unit.hp}/${unit.max_hp})`;
+  mesh.userData.label = `${getUnitName(unit.type)} (${unit.hp}/${unit.max_hp})`;
 }
 
 function createBuildingMesh(building) {
-  const geometry = new THREE.BoxGeometry(8, 6, 8);
+  const { width, height, depth } = getBuildingDimensions(building.type);
+  const geometry = new THREE.BoxGeometry(width, height, depth);
   const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color(getPlayerColor(building.owner)),
     roughness: 0.6,
@@ -455,16 +503,23 @@ function createBuildingMesh(building) {
     emissive: new THREE.Color(0x000000),
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = { id: building.id, owner: building.owner, kind: "building", label: "" };
+  mesh.userData = {
+    id: building.id,
+    owner: building.owner,
+    kind: "building",
+    label: "",
+    dimensions: { width, height, depth },
+  };
   return mesh;
 }
 
 function updateBuildingMesh(mesh, building) {
   const [bx, by] = building.position;
-  mesh.position.set(bx, 3, by);
+  const height = mesh.userData.dimensions?.height ?? getBuildingDimensions(building.type).height;
+  mesh.position.set(bx, height / 2, by);
   mesh.material.color.set(getPlayerColor(building.owner));
   mesh.userData.owner = building.owner;
-  mesh.userData.label = `${building.type.toUpperCase()} (${building.hp}/${building.max_hp})`;
+  mesh.userData.label = `${getBuildingName(building.type)} (${building.hp}/${building.max_hp})`;
 }
 
 function createResourceMesh(resource) {
@@ -516,13 +571,115 @@ function getPlayerColor(owner) {
 
 function getUnitDimensions(type) {
   switch (type) {
-    case "tank":
+    case "ore_miner":
+      return { radius: 3.1, height: 2.6, segments: 18 };
+    case "grizzly_tank":
+      return { radius: 2.6, height: 2.2, segments: 18 };
+    case "prism_tank":
       return { radius: 2.8, height: 2.4, segments: 20 };
-    case "harvester":
-      return { radius: 2.6, height: 2.2, segments: 16 };
+    case "mirage_tank":
+      return { radius: 2.7, height: 2.3, segments: 20 };
+    case "gi":
+      return { radius: 1.7, height: 1.9, segments: 14 };
+    case "conscript":
     default:
-      return { radius: 1.6, height: 1.8, segments: 12 };
+      return { radius: 1.5, height: 1.8, segments: 12 };
   }
+}
+
+function getBuildingDimensions(type) {
+  switch (type) {
+    case "construction_yard":
+      return { width: 12, height: 6.5, depth: 12 };
+    case "ore_refinery":
+      return { width: 10, height: 6, depth: 10 };
+    case "war_factory":
+      return { width: 12, height: 6.2, depth: 12 };
+    case "barracks":
+    default:
+      return { width: 8, height: 5.6, depth: 8 };
+  }
+}
+
+function updateProductionPanel() {
+  if (!productionButtonsContainer || !productionHint || !productionQueue) return;
+
+  productionButtonsContainer.innerHTML = "";
+  productionQueue.textContent = "";
+  productionQueue.style.display = "none";
+
+  if (!gameState || !selectedBuilding) {
+    productionHint.textContent =
+      "Select one of your structures to view available unit training options.";
+    return;
+  }
+
+  const building = gameState.buildings.find((b) => b.id === selectedBuilding);
+  if (!building || building.owner !== playerId) {
+    productionHint.textContent =
+      "Select one of your structures to view available unit training options.";
+    return;
+  }
+
+  const buildable = building.buildable_units || [];
+  const queue = building.queue || [];
+  productionQueue.style.display = "block";
+  productionQueue.innerHTML = `<strong>Queue:</strong> ${
+    queue.length > 0 ? queue.map((unit) => getUnitName(unit)).join(", ") : "Empty"
+  }`;
+
+  if (buildable.length === 0) {
+    productionHint.textContent = `${getBuildingName(building.type)} cannot train units.`;
+    return;
+  }
+
+  const player = gameState.players?.[playerId];
+  const credits = player ? player.credits : 0;
+  productionHint.textContent = `${getBuildingName(building.type)} ready for orders.`;
+
+  buildable.forEach((unitType) => {
+    const info = UNIT_CATALOG[unitType] || null;
+    const button = document.createElement("button");
+    button.dataset.unit = unitType;
+
+    const title = document.createElement("strong");
+    title.textContent = getUnitName(unitType);
+    button.appendChild(title);
+
+    const cost = info && typeof info.cost === "number" ? info.cost : null;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = cost !== null ? `Cost: ${cost} credits` : "Cost: unknown";
+    button.appendChild(meta);
+
+    if (info?.description) {
+      const desc = document.createElement("span");
+      desc.className = "desc";
+      desc.textContent = info.description;
+      button.appendChild(desc);
+    }
+
+    if (cost !== null) {
+      button.disabled = credits < cost;
+    }
+
+    productionButtonsContainer.appendChild(button);
+  });
+}
+
+function formatIdentifier(value) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getUnitName(type) {
+  return UNIT_CATALOG[type]?.name || formatIdentifier(type);
+}
+
+function getBuildingName(type) {
+  return BUILDING_NAMES[type] || formatIdentifier(type);
 }
 
 function pushEvent(message) {
