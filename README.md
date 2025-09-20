@@ -39,10 +39,25 @@ Legacy Pygame rendering and networking experiments have been retained in
 case they are useful for future front-end work, but the focus of this
 iteration is the backend simulation.
 
+## Installation
+
+The prototype targets Python 3.10 or newer. Create and activate a virtual
+environment, then install the dependencies listed in
+[`requirements.txt`](requirements.txt):
+
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+The dependencies include tooling for tests and legacy rendering
+experiments. They are lightweight and allow you to run the backend demo
+as well as revisit the earlier Pygame prototypes if desired.
+
 ## Running the demo
 
-Create a virtual environment, install the minimal dependencies (Python
-3.10+) and execute the main entry point:
+With the environment prepared, execute the main entry point:
 
 ```
 python main.py
