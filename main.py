@@ -1,68 +1,56 @@
-# main.py
-import pygame
-import game
-import threading
-from network import server, client
+"""Text based driver showcasing the PvPvE match flow."""
+
+from __future__ import annotations
+
 import random
+import uuid
+from typing import List
 
-selected_unit = None
+from rts import GameServer, Loadout, MatchConfig, PlayerProfile
 
-def start_network(role):
-    if role == "server":
-        server_thread = threading.Thread(target=server.start_server)
-        server_thread.start()
-    elif role == "client":
-        client_thread = threading.Thread(target=client.start_client)
-        client_thread.start()
 
-def spawn_unit(player):
-    x, y = random.randint(100, 700), random.randint(100, 500)
-    unit = game.Unit(x, y, player)
-    game.units.add(unit)
-    return unit
+def _generate_players(count: int) -> List[PlayerProfile]:
+    profiles = []
+    for idx in range(count):
+        profile = PlayerProfile(
+            account_id=uuid.uuid4(),
+            display_name=f"Commander-{idx + 1}",
+            skill_rating=random.randint(1000, 1800),
+        )
+        profiles.append(profile)
+    return profiles
 
-def main():
-    global selected_unit
 
-    role = input("Enter role (server/client): ")
-    start_network(role)
-    
-    pygame.init()
-    screen = pygame.display.set_mode((800, 600))
-    pygame.display.set_caption("Simplified RTS Game")
-    clock = pygame.time.Clock()
+def _generate_loadout() -> Loadout:
+    return Loadout(
+        archetype=random.choice(["Assault", "Engineer", "Support", "Recon"]),
+        primary_weapon=random.choice(["Railgun", "Plasma Rifle", "Gatling Laser"]),
+        secondary_weapon=random.choice(["SMG", "Shotgun", "Pistol"]),
+        utility=random.choice(["Deployable Shield", "Med Drone", "EMP Charge"]),
+        tech_level=random.randint(1, 5),
+    )
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1:
-                    if client.player == 1 and game.player_resources[1] >= 100:
-                        game.player_resources[1] -= 100
-                        selected_unit = spawn_unit(client.player)
-                    elif client.player == 2 and game.player_resources[2] >= 100:
-                        game.player_resources[2] -= 100
-                        selected_unit = spawn_unit(client.player)
-                elif event.key in [pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT]:
-                    if selected_unit:
-                        if event.key == pygame.K_UP:
-                            selected_unit.move(0, -selected_unit.speed)
-                        elif event.key == pygame.K_DOWN:
-                            selected_unit.move(0, selected_unit.speed)
-                        elif event.key == pygame.K_LEFT:
-                            selected_unit.move(-selected_unit.speed, 0)
-                        elif event.key == pygame.K_RIGHT:
-                            selected_unit.move(selected_unit.speed, 0)
 
-        game.update()
-        game.render(screen)
+def run_demo(player_count: int = 24) -> None:
+    config = MatchConfig(min_players=20, max_players=40, match_duration_seconds=10 * 60)
+    server = GameServer(config)
+    profiles = _generate_players(player_count)
+    print("[Lobby] Queueing players for matchmaking...")
+    for profile in profiles:
+        server.enqueue_player(profile, _generate_loadout())
+    print(f"[Matchmaking] {player_count} players queued. Spinning server ticks...")
+    server.run_until_idle()
+    print("[Rewards] Matches resolved. Granting progression and loot.")
+    for profile in profiles:
+        rewards = server.collect_rewards(profile.account_id)
+        if not rewards:
+            continue
+        summary, stash = rewards
+        print(
+            f"- {profile.display_name}: +{summary.xp_gained} XP, "
+            f"Loot secured={len(summary.loot_secured)}, Cosmetics={summary.cosmetics_unlocked}"
+        )
 
-        pygame.display.flip()
-        clock.tick(60)
-
-    pygame.quit()
 
 if __name__ == "__main__":
-    main()
+    run_demo()

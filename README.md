@@ -1,54 +1,73 @@
-# RTS Game Developer Documentations
+# PvPvE RTS Backend Prototype
 
-Welcome to the RTS Game project! This document serves as a guide for developers looking to contribute to this simplified real-time strategy (RTS) game developed using Python and the Pygame library. The game features basic multiplayer functionality through a client-server network architecture.
+This repository contains a Python prototype that models the backend
+systems required for a session-based PvPvE arena inspired by classic
+real-time strategy games.  The goal is to showcase how a horizontally
+scalable, server-authoritative architecture can orchestrate 20–40 human
+players, 100–300 AI combatants and dynamic map systems within 10–15
+minute matches.
 
-## Table of Contents
+## High level loop
 
-- [Project Overview](#project-overview)
-- [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
-- [Development Guidelines](#development-guidelines)
-- [Contributing](#contributing)
-- [License](#license)
+```
+Lobby → Loadout → Arena (PvE + PvP) → Extraction/Death → Rewards
+```
 
-## Project Overview
+Players queue through the matchmaking service, configure their loadouts
+and drop into an arena that features points of interest, dynamic hazards
+and procedurally selected spawn locations.  Surviving the combat phase
+grants loot and experience, while death causes the player to lose their
+unsecured rewards.
 
-The RTS Game is a real-time strategy game where players build and manage their own virtual civilizations. It offers a rich and immersive gaming experience, allowing players to explore, expand, exploit, and exterminate in a dynamic and ever-changing world.
+## Repository structure
 
-## Getting Started
+- `main.py` – Text-based driver that queues players, runs a match and
+  prints the resulting rewards.
+- `rts/` – Core backend modules:
+  - `arena.py` – Generates maps, points of interest and environmental
+    hazards.
+  - `config.py` – Match configuration and validation helpers.
+  - `entities.py` – Player, inventory and AI combatant data structures.
+  - `game_server.py` – Authoritative server facade managing sessions.
+  - `matchmaking.py` – Skill-based matchmaking queue.
+  - `progression.py` – Progression, loot stashing and cosmetics economy
+    services.
+  - `session.py` – Server-side simulation of a PvPvE match.
+- `tests/` – Automated coverage for matchmaking and session logic.
 
-To get started with development, follow these steps:
+Legacy Pygame rendering and networking experiments have been retained in
+case they are useful for future front-end work, but the focus of this
+iteration is the backend simulation.
 
-1. Clone the repository: `git clone https://github.com/your-username/RTS_game.git`
-2. Navigate to the project directory: `cd RTS_game`
-3. Install dependencies: `pip install pygame noise`
-4. Start the game: `python main.py`
+## Running the demo
 
-## Project Structure
+Create a virtual environment, install the minimal dependencies (Python
+3.10+) and execute the main entry point:
 
-The project is organized as follows:
+```
+python main.py
+```
 
-- `__pycache__/`: Python cache files.
-- `game.py`: Handles game logic, rendering, and state updates.
-- `main.py`: The entry point of the game. Manages game initialization and the main game loop.
-- `map_generator.py`: Responsible for generating the game map and managing terrain.
-- `network/`: Contains networking code with `client.py` and `server.py` for multiplayer functionality.
-- `README.md`: Project documentation.
-- `test_all.py`: Script for running all tests.
+The script enqueues 24 mock players, drives the server tick loop until
+all matches resolve and prints the reward summary for each participant.
 
-## Development Guidelines
+## Tests
 
-When developing for the RTS Game, please adhere to the following guidelines:
+The project uses `pytest` for validation.  Run the following command to
+execute the suite:
 
-- **Code Style**: Follow PEP 8 style guide for Python code.
-- **Commit Messages**: Use clear and descriptive commit messages.
-- **Testing**: Write tests for new features and bug fixes when possible.
-- **Documentation**: Update the README.md and inline documentation as needed.
+```
+pytest
+```
 
-## Contributing
+## Extending the prototype
 
-We welcome contributions to the RTS Game project! If you'd like to contribute, please follow our contribution guidelines and submit a pull request. For more details, refer to the [Contributing](#contributing) section of the main README.md.
+The code is intentionally modular so that services can be split into
+separate micro-services or scaled horizontally.  Suggested next steps
+include:
 
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for more details.
+- Replacing the random combat resolution with deterministic, lockstep
+  simulation.
+- Persisting player progression to a database.
+- Reintroducing a modern client (web or native) that connects to the
+  authoritative server using websockets or gRPC.
