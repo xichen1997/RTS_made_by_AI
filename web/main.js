@@ -34,7 +34,7 @@ let playerColor = "#ffffff";
 let gameState = null;
 let selectedUnits = new Set();
 let selectedBuilding = null; // { id: string, type: string } | null
-let mapSize = [96, 64];
+let mapSize = [160, 120];
 let lastHover = null;
 
 let ground = null;
@@ -52,30 +52,16 @@ const COLORS = {
 
 const BASE_PRODUCTION_HINT = productionHint ? productionHint.textContent : "";
 
-const PRODUCTION_OPTIONS = {
-  construction_yard: [
-    { unit: "engineer", label: "Train Engineer" },
-  ],
-  ore_refinery: [
-    { unit: "ore_miner", label: "Deploy Ore Miner" },
-  ],
-  barracks: [
-    { unit: "conscript", label: "Train Conscript" },
-    { unit: "gi", label: "Deploy GI" },
-    { unit: "engineer", label: "Mobilize Engineer" },
-    { unit: "rocketeer", label: "Launch Rocketeer" },
-  ],
-  war_factory: [
-    { unit: "grizzly_tank", label: "Build Grizzly Tank" },
-    { unit: "ifv", label: "Assemble IFV" },
-    { unit: "mirage_tank", label: "Deploy Mirage Tank" },
-    { unit: "prism_tank", label: "Construct Prism Tank" },
-  ],
-  airforce_command: [
-    { unit: "rocketeer", label: "Launch Rocketeer" },
-  ],
-  power_plant: [],
-  prism_tower: [],
+const PRODUCTION_LABELS = {
+  engineer: "Mobilize Engineer",
+  ore_miner: "Deploy Ore Miner",
+  conscript: "Train Conscript",
+  gi: "Deploy GI",
+  rocketeer: "Launch Rocketeer",
+  grizzly_tank: "Build Grizzly Tank",
+  ifv: "Assemble IFV",
+  mirage_tank: "Deploy Mirage Tank",
+  prism_tank: "Construct Prism Tank",
 };
 
 initializeMapGeometry();
@@ -264,7 +250,7 @@ function openSocket(room, name) {
           renderProductionButtons(null);
         } else {
           selectedBuilding.type = matching.type;
-          renderProductionButtons(selectedBuilding.type);
+          renderProductionButtons(selectedBuilding);
         }
       }
       updateEventLog(gameState.events || []);
@@ -295,7 +281,7 @@ function handleSelection(picked, additive) {
     selectedBuilding = null;
   }
   if (!picked) {
-    renderProductionButtons(selectedBuilding ? selectedBuilding.type : null);
+    renderProductionButtons(selectedBuilding);
     return;
   }
   if (picked.owner === playerId && picked.kind === "unit") {
@@ -314,7 +300,7 @@ function handleSelection(picked, additive) {
     selectedUnits.clear();
     selectedBuilding = null;
   }
-  renderProductionButtons(selectedBuilding ? selectedBuilding.type : null);
+  renderProductionButtons(selectedBuilding);
 }
 
 function handleCommand(target, groundPoint) {
@@ -349,22 +335,32 @@ function handleCommand(target, groundPoint) {
   }
 }
 
-function renderProductionButtons(buildingType) {
+function renderProductionButtons(selection) {
   if (!productionButtonsContainer || !productionHint) return;
   productionButtonsContainer.innerHTML = "";
-  if (!buildingType) {
+  if (!selection) {
     productionHint.textContent = BASE_PRODUCTION_HINT;
     return;
   }
-  const options = PRODUCTION_OPTIONS[buildingType] || [];
-  if (options.length === 0) {
-    productionHint.textContent = `${formatLabel(buildingType)} cannot produce units.`;
+  if (!gameState) {
+    productionHint.textContent = "Connect to a room before queuing production.";
     return;
   }
-  productionHint.textContent = `Queue units at ${formatLabel(buildingType)}.`;
-  for (const option of options) {
+  const buildingData = gameState.buildings.find((building) => building.id === selection.id);
+  if (!buildingData) {
+    productionHint.textContent = BASE_PRODUCTION_HINT;
+    return;
+  }
+  const buildableUnits = buildingData.buildable_units || [];
+  if (buildableUnits.length === 0) {
+    productionHint.textContent = `${formatLabel(buildingData.type)} cannot produce units.`;
+    return;
+  }
+  productionHint.textContent = `Queue units at ${formatLabel(buildingData.type)}.`;
+  for (const unitType of buildableUnits) {
+    const label = PRODUCTION_LABELS[unitType] || `Train ${formatLabel(unitType)}`;
     const button = document.createElement("button");
-    button.textContent = option.label;
+    button.textContent = label;
     button.addEventListener("click", () => {
       if (!socket || socket.readyState !== WebSocket.OPEN) {
         pushEvent("Connect to a room before issuing production commands.");
@@ -377,10 +373,18 @@ function renderProductionButtons(buildingType) {
       sendCommand({
         action: "build_unit",
         building_id: selectedBuilding.id,
-        unit_type: option.unit,
+        unit_type: unitType,
       });
     });
     productionButtonsContainer.appendChild(button);
+  }
+  if (buildingData.queue && buildingData.queue.length > 0) {
+    const queueIndicator = document.createElement("div");
+    queueIndicator.className = "queue-indicator";
+    queueIndicator.textContent = `In queue: ${buildingData.queue
+      .map((queued) => formatLabel(queued))
+      .join(", ")}`;
+    productionButtonsContainer.appendChild(queueIndicator);
   }
 }
 

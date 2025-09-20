@@ -152,6 +152,12 @@ canvas#battlefield {
   border-color: var(--accent);
 }
 
+#production-buttons .queue-indicator {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .panel ul {
   padding-left: 1.2rem;
   color: var(--muted);

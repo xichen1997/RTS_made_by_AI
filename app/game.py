@@ -165,10 +165,13 @@ class RTSGame:
     # ------------------------------------------------------------------
     def update(self, dt: float) -> None:
         self.time_accumulator += dt
-        self._process_commands()
-        self._update_buildings(dt)
-        self._update_units(dt)
-        self.tick += 1
+        tick_length = 1.0 / config.TICK_RATE
+        while self.time_accumulator >= tick_length:
+            self._process_commands()
+            self._update_buildings(tick_length)
+            self._update_units(tick_length)
+            self.tick += 1
+            self.time_accumulator -= tick_length
 
     def _update_buildings(self, dt: float) -> None:
         for building in list(self.buildings.values()):
@@ -317,6 +320,7 @@ class RTSGame:
                 "position": building.position.to_tuple(),
                 "hp": building.hp,
                 "max_hp": building.max_hp,
+                "buildable_units": list(building.buildable_units),
                 "queue": [task.unit_type for task in building.production_queue],
             }
             for building in self.buildings.values()
@@ -363,18 +367,24 @@ class RTSGame:
 
     def _spawn_starting_base(self, player: PlayerState, spawn: Tuple[float, float]) -> None:
         base_center = Vector2(spawn[0], spawn[1])
+        horizontal = -1.0 if base_center.x > config.MAP_WIDTH / 2 else 1.0
+        vertical = -1.0 if base_center.y > config.MAP_HEIGHT / 2 else 1.0
         layout = [
-            ("construction_yard", base_center.copy()),
-            ("power_plant", Vector2(base_center.x + 6, base_center.y - 4)),
-            ("ore_refinery", Vector2(base_center.x - 6, base_center.y + 4)),
-            ("barracks", Vector2(base_center.x + 8, base_center.y + 6)),
-            ("war_factory", Vector2(base_center.x + 14, base_center.y + 2)),
-            ("airforce_command", Vector2(base_center.x - 4, base_center.y + 10)),
-            ("prism_tower", Vector2(base_center.x + 4, base_center.y + 12)),
+            ("construction_yard", 0.0, 0.0),
+            ("power_plant", 14.0, -10.0),
+            ("ore_refinery", -16.0, 12.0),
+            ("barracks", 20.0, 16.0),
+            ("war_factory", 30.0, 4.0),
+            ("airforce_command", -6.0, 28.0),
+            ("prism_tower", 12.0, 32.0),
         ]
 
         buildings_by_kind: Dict[str, Building] = {}
-        for kind, position in layout:
+        for kind, offset_x, offset_y in layout:
+            position = Vector2(
+                base_center.x + offset_x * horizontal,
+                base_center.y + offset_y * vertical,
+            )
             building = self._spawn_building(player, kind, position)
             player.buildings[building.id] = building
             self.buildings[building.id] = building
