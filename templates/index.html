@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Procedural RTS Prototype</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="layout__board">
+        <canvas id="gameCanvas" width="960" height="640" aria-label="Game canvas"></canvas>
+        <div class="toolbar" role="toolbar" aria-label="Game controls">
+          <button id="spawnButton" type="button">Spawn unit</button>
+          <button id="regenerateButton" type="button">New world</button>
+          <label class="toolbar__label" for="seedInput">Seed</label>
+          <input id="seedInput" name="seed" type="number" placeholder="Random" />
+          <span class="toolbar__hint">Click a unit to select it, click a tile to move.</span>
+        </div>
+      </section>
+      <aside class="layout__sidebar">
+        <h1>Procedural RTS Prototype</h1>
+        <p>
+          This lightweight prototype ports the procedural terrain explorer to the web.
+          Generate new worlds, spawn explorer units and command them around the map
+          directly in your browser.
+        </p>
+        <section>
+          <h2>How to play</h2>
+          <ol>
+            <li>Press <strong>Spawn unit</strong> and click the map to place explorers.</li>
+            <li>Click a unit to select it. A highlighted outline indicates selection.</li>
+            <li>Click anywhere else on the map to set the selected unit's destination.</li>
+            <li>Use <strong>New world</strong> to regenerate the map. Provide a seed for reproducible results.</li>
+          </ol>
+        </section>
+        <section>
+          <h2>Debug helpers</h2>
+          <p>
+            The panel below mirrors the in-memory game state so it is easier to debug and
+            extend the experience. Use it to verify positions, targets and selection state.
+          </p>
+          <pre id="debugPanel" aria-live="polite"></pre>
+        </section>
+      </aside>
+    </main>
+    <script src="{{ url_for('static', filename='js/game.js') }}" type="module"></script>
+  </body>
+</html>

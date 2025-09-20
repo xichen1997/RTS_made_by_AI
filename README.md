@@ -21,17 +21,25 @@ To get started with development, follow these steps:
 
 1. Clone the repository: `git clone https://github.com/your-username/RTS_game.git`
 2. Navigate to the project directory: `cd RTS_game`
-3. Install dependencies: `pip install pygame noise`
-4. Start the game: `python main.py`
+3. Install dependencies: `pip install -r requirements.txt`
+4. Start the web server: `python app.py`
+5. Open the game in your browser: `http://127.0.0.1:5000`
+
+The legacy Pygame prototype is still available through `python main.py`,
+but the recommended way to experience the project is via the new web
+client.
 
 ## Project Structure
 
 The project is organized as follows:
 
 - `__pycache__/`: Python cache files.
-- `game.py`: Handles game logic, rendering, and state updates.
-- `main.py`: The entry point of the game. Manages game initialization and the main game loop.
+- `game.py`: Handles game logic, rendering, and state updates for the legacy desktop prototype.
+- `app.py`: Flask application that serves the browser based prototype.
+- `main.py`: Legacy Pygame entry point kept for reference.
 - `map_generator.py`: Responsible for generating the game map and managing terrain.
+- `web_map_generator.py`: Headless map generator used by the web server.
+- `templates/` and `static/`: Assets powering the single page web client.
 - `network/`: Contains networking code with `client.py` and `server.py` for multiplayer functionality.
 - `README.md`: Project documentation.
 - `test_all.py`: Script for running all tests.
