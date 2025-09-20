@@ -1,88 +1,78 @@
-# PvPvE RTS Backend Prototype
+# Red Horizon Online
 
-This repository contains a Python prototype that models the backend
-systems required for a session-based PvPvE arena inspired by classic
-real-time strategy games.  The goal is to showcase how a horizontally
-scalable, server-authoritative architecture can orchestrate 20–40 human
-players, 100–300 AI combatants and dynamic map systems within 10–15
-minute matches.
+Red Horizon Online is a browser-based real-time strategy game inspired by
+classic base building titles such as *Command & Conquer: Red Alert 2*. The
+project ships with a FastAPI backend that simulates the battlefield on the
+server and a lightweight HTML5 canvas client that renders the warzone inside
+any modern web browser. Matches are room-based and support up to four human
+commanders fighting across the same online lobby.
 
-## High level loop
+## Features
 
-```
-Lobby → Loadout → Arena (PvE + PvP) → Extraction/Death → Rewards
-```
+- **Authoritative server** – the FastAPI application keeps the canonical game
+  state, processes unit orders and streams snapshots to connected clients over
+  WebSockets.
+- **Resource economy** – harvest ore fields to earn credits, queue production at
+  your HQ or factory and grow your army.
+- **Combined arms combat** – infantry, tanks and harvesters each have unique
+  statistics and behaviours. Units automatically retaliate when enemy forces
+  approach.
+- **Cooperative networking** – host the server once and share the room ID with
+  friends to play together directly from your browsers.
 
-Players queue through the matchmaking service, configure their loadouts
-and drop into an arena that features points of interest, dynamic hazards
-and procedurally selected spawn locations.  Surviving the combat phase
-grants loot and experience, while death causes the player to lose their
-unsecured rewards.
+## Getting started
 
-## Repository structure
+### Prerequisites
 
-- `main.py` – Text-based driver that queues players, runs a match and
-  prints the resulting rewards.
-- `rts/` – Core backend modules:
-  - `arena.py` – Generates maps, points of interest and environmental
-    hazards.
-  - `config.py` – Match configuration and validation helpers.
-  - `entities.py` – Player, inventory and AI combatant data structures.
-  - `game_server.py` – Authoritative server facade managing sessions.
-  - `matchmaking.py` – Skill-based matchmaking queue.
-  - `progression.py` – Progression, loot stashing and cosmetics economy
-    services.
-  - `session.py` – Server-side simulation of a PvPvE match.
-- `tests/` – Automated coverage for matchmaking and session logic.
+- Python 3.10 or newer
 
-Legacy Pygame rendering and networking experiments have been retained in
-case they are useful for future front-end work, but the focus of this
-iteration is the backend simulation.
+### Installation
 
-## Installation
-
-The prototype targets Python 3.10 or newer. Create and activate a virtual
-environment, then install the dependencies listed in
-[`requirements.txt`](requirements.txt):
-
-```
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The dependencies include tooling for tests and legacy rendering
-experiments. They are lightweight and allow you to run the backend demo
-as well as revisit the earlier Pygame prototypes if desired.
+### Launching the server
 
-## Running the demo
-
-With the environment prepared, execute the main entry point:
-
-```
-python main.py
+```bash
+uvicorn app.server:app --reload
 ```
 
-The script enqueues 24 mock players, drives the server tick loop until
-all matches resolve and prints the reward summary for each participant.
+The server listens on `http://127.0.0.1:8000/` by default. Open that address in
+one or more browser tabs, choose a commander name and join the same room to
+start a match.
 
-## Tests
+### Controls
 
-The project uses `pytest` for validation.  Run the following command to
-execute the suite:
+- **Left click** your units or buildings to select them. Hold <kbd>Shift</kbd>
+  to add or remove additional units from the selection.
+- **Right click** the map to move your army. Right click enemy units or
+  structures to attack them.
+- **Right click** resource fields with harvesters selected to send them mining.
+- Use the buttons in the Production panel to queue new units while your
+  headquarters or factory are selected.
 
-```
+## Running tests
+
+The repository includes a focused test suite that validates the core economic
+loop and combat logic. Execute it with:
+
+```bash
 pytest
 ```
 
-## Extending the prototype
+## Project structure
 
-The code is intentionally modular so that services can be split into
-separate micro-services or scaled horizontally.  Suggested next steps
-include:
+```
+app/          # FastAPI application and game simulation
+web/          # Static HTML/CSS/JS front-end client
+README.md     # This file
+requirements.txt
+```
 
-- Replacing the random combat resolution with deterministic, lockstep
-  simulation.
-- Persisting player progression to a database.
-- Reintroducing a modern client (web or native) that connects to the
-  authoritative server using websockets or gRPC.
+## Contributing
+
+Pull requests are welcome. Please ensure code is type annotated and documented,
+run the supplied tests and linting tools before submitting changes.
