@@ -355,22 +355,43 @@ class RTSGame:
             )
 
     def _spawn_starting_base(self, player: PlayerState, spawn: Tuple[float, float]) -> None:
-        hq = self._spawn_building(player, "hq", Vector2(spawn[0], spawn[1]))
-        factory_offset = Vector2(spawn[0] + 4, spawn[1] + 4)
-        factory = self._spawn_building(player, "factory", factory_offset)
-        player.buildings[hq.id] = hq
-        player.buildings[factory.id] = factory
-        self.buildings[hq.id] = hq
-        self.buildings[factory.id] = factory
+        origin = Vector2(spawn[0], spawn[1])
 
-        # Initial army
-        for _ in range(2):
-            soldier = self._spawn_unit(player, "soldier", near=factory.position)
-            player.units[soldier.id] = soldier
-            self.units[soldier.id] = soldier
-        harvester = self._spawn_unit(player, "harvester", near=hq.position)
-        player.units[harvester.id] = harvester
-        self.units[harvester.id] = harvester
+        def place(dx: float, dy: float) -> Vector2:
+            x = max(4.0, min(config.MAP_WIDTH - 4.0, origin.x + dx))
+            y = max(4.0, min(config.MAP_HEIGHT - 4.0, origin.y + dy))
+            return Vector2(x, y)
+
+        building_plan = [
+            ("construction_yard", place(0, 0)),
+            ("power_plant", place(6, -4)),
+            ("ore_refinery", place(-6, 4)),
+            ("barracks", place(8, 2)),
+            ("war_factory", place(4, 8)),
+            ("airforce_command", place(-8, 8)),
+        ]
+
+        spawned_buildings = {}
+        for kind, position in building_plan:
+            building = self._spawn_building(player, kind, position)
+            spawned_buildings[kind] = building
+            player.buildings[building.id] = building
+            self.buildings[building.id] = building
+
+        # Initial army tuned to highlight the new tech tree.
+        initial_units = [
+            ("ore_miner", spawned_buildings["ore_refinery"].position),
+            ("conscript", spawned_buildings["barracks"].position),
+            ("conscript", spawned_buildings["barracks"].position),
+            ("gi", spawned_buildings["barracks"].position),
+            ("grizzly_tank", spawned_buildings["war_factory"].position),
+            ("rocketeer", spawned_buildings["airforce_command"].position),
+        ]
+
+        for unit_type, near in initial_units:
+            unit = self._spawn_unit(player, unit_type, near=near)
+            player.units[unit.id] = unit
+            self.units[unit.id] = unit
 
     def _spawn_building(
         self, player: PlayerState, kind: str, position: Vector2
@@ -383,7 +404,7 @@ class RTSGame:
             position=position,
             max_hp=stats["max_hp"],
             hp=stats["max_hp"],
-            buildable_units=list(stats["buildable_units"]),
+            buildable_units=list(stats.get("buildable_units", [])),
         )
         return building
 
@@ -403,7 +424,7 @@ class RTSGame:
             attack_damage=stats["attack_damage"],
             attack_range=stats["attack_range"],
             attack_cooldown=stats["attack_cooldown"],
-            role="harvester" if unit_type == "harvester" else "combat",
+            role=stats.get("role", "combat"),
         )
         return unit
 

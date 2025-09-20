@@ -49,6 +49,13 @@ const COLORS = {
   neutral: "#facc15",
 };
 
+function formatLabel(value) {
+  return value
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
 initializeMapGeometry();
 resizeRendererToDisplaySize();
 configureCamera();
@@ -443,7 +450,7 @@ function updateUnitMesh(mesh, unit) {
   mesh.position.set(ux, height / 2, uy);
   mesh.material.color.set(getPlayerColor(unit.owner));
   mesh.userData.owner = unit.owner;
-  mesh.userData.label = `${unit.type.toUpperCase()} (${unit.hp}/${unit.max_hp})`;
+  mesh.userData.label = `${formatLabel(unit.type)} (${unit.hp}/${unit.max_hp})`;
 }
 
 function createBuildingMesh(building) {
@@ -464,7 +471,9 @@ function updateBuildingMesh(mesh, building) {
   mesh.position.set(bx, 3, by);
   mesh.material.color.set(getPlayerColor(building.owner));
   mesh.userData.owner = building.owner;
-  mesh.userData.label = `${building.type.toUpperCase()} (${building.hp}/${building.max_hp})`;
+  mesh.userData.label = `${formatLabel(
+    building.type
+  )} (${building.hp}/${building.max_hp})`;
 }
 
 function createResourceMesh(resource) {
@@ -516,10 +525,22 @@ function getPlayerColor(owner) {
 
 function getUnitDimensions(type) {
   switch (type) {
-    case "tank":
+    case "ore_miner":
+      return { radius: 3.2, height: 2.4, segments: 18 };
+    case "grizzly_tank":
       return { radius: 2.8, height: 2.4, segments: 20 };
-    case "harvester":
-      return { radius: 2.6, height: 2.2, segments: 16 };
+    case "prism_tank":
+      return { radius: 3.0, height: 2.5, segments: 24 };
+    case "mirage_tank":
+      return { radius: 2.9, height: 2.3, segments: 22 };
+    case "kirov_airship":
+      return { radius: 3.5, height: 3.2, segments: 26 };
+    case "rocketeer":
+      return { radius: 1.6, height: 2.6, segments: 16 };
+    case "gi":
+      return { radius: 1.5, height: 2.0, segments: 14 };
+    case "conscript":
+      return { radius: 1.4, height: 1.8, segments: 12 };
     default:
       return { radius: 1.6, height: 1.8, segments: 12 };
   }
