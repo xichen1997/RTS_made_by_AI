@@ -1,88 +1,68 @@
-# PvPvE RTS Backend Prototype
+# ChronoFront – Web RTS Prototype
 
-This repository contains a Python prototype that models the backend
-systems required for a session-based PvPvE arena inspired by classic
-real-time strategy games.  The goal is to showcase how a horizontally
-scalable, server-authoritative architecture can orchestrate 20–40 human
-players, 100–300 AI combatants and dynamic map systems within 10–15
-minute matches.
+ChronoFront is a browser-based real-time strategy game inspired by
+classic base building titles such as *Red Alert 2*. The experience is
+served entirely from Python using FastAPI and synchronises state with
+connected clients over WebSockets so that friends can join the same
+match across the network.
 
-## High level loop
+## Features
 
-```
-Lobby → Loadout → Arena (PvE + PvP) → Extraction/Death → Rewards
-```
+- **Authoritative simulation** – the server drives the match, handling
+  unit production, combat resolution and victory detection.
+- **Fast WebSocket updates** – clients receive frequent state snapshots
+  and send commands with low latency.
+- **Built-in UI** – a responsive control panel for production,
+  rally point management and match events.
+- **Extensible code** – the game logic lives in well-documented Python
+  modules that can be extended with new unit types or mechanics.
 
-Players queue through the matchmaking service, configure their loadouts
-and drop into an arena that features points of interest, dynamic hazards
-and procedurally selected spawn locations.  Surviving the combat phase
-grants loot and experience, while death causes the player to lose their
-unsecured rewards.
+## Getting started
 
-## Repository structure
+Create and activate a virtual environment, then install the
+requirements:
 
-- `main.py` – Text-based driver that queues players, runs a match and
-  prints the resulting rewards.
-- `rts/` – Core backend modules:
-  - `arena.py` – Generates maps, points of interest and environmental
-    hazards.
-  - `config.py` – Match configuration and validation helpers.
-  - `entities.py` – Player, inventory and AI combatant data structures.
-  - `game_server.py` – Authoritative server facade managing sessions.
-  - `matchmaking.py` – Skill-based matchmaking queue.
-  - `progression.py` – Progression, loot stashing and cosmetics economy
-    services.
-  - `session.py` – Server-side simulation of a PvPvE match.
-- `tests/` – Automated coverage for matchmaking and session logic.
-
-Legacy Pygame rendering and networking experiments have been retained in
-case they are useful for future front-end work, but the focus of this
-iteration is the backend simulation.
-
-## Installation
-
-The prototype targets Python 3.10 or newer. Create and activate a virtual
-environment, then install the dependencies listed in
-[`requirements.txt`](requirements.txt):
-
-```
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The dependencies include tooling for tests and legacy rendering
-experiments. They are lightweight and allow you to run the backend demo
-as well as revisit the earlier Pygame prototypes if desired.
+Launch the web server:
 
-## Running the demo
-
-With the environment prepared, execute the main entry point:
-
-```
+```bash
 python main.py
 ```
 
-The script enqueues 24 mock players, drives the server tick loop until
-all matches resolve and prints the reward summary for each participant.
+Open `http://localhost:8000/` in your browser. Each additional tab or
+player on your network can connect to the same address to join the
+match. Players select units with the left mouse button and issue move
+orders with the right mouse button. Use the buttons in the Production
+panel to queue new units.
 
-## Tests
+## Development
 
-The project uses `pytest` for validation.  Run the following command to
-execute the suite:
+- **Server code** lives under `rts_web/` with the simulation in
+  `rts_web/game/`.
+- **Static files** (`index.html`, `style.css`, `main.js`) are under
+  `web/static/`.
+- **Tests** are located in `tests/` and can be executed with `pytest`.
 
-```
+To iterate on the front-end, update the assets under `web/static` and
+refresh the browser. The FastAPI application automatically serves the
+latest files.
+
+## Testing
+
+Run the unit test suite with:
+
+```bash
 pytest
 ```
 
-## Extending the prototype
+## Roadmap ideas
 
-The code is intentionally modular so that services can be split into
-separate micro-services or scaled horizontally.  Suggested next steps
-include:
-
-- Replacing the random combat resolution with deterministic, lockstep
-  simulation.
-- Persisting player progression to a database.
-- Reintroducing a modern client (web or native) that connects to the
-  authoritative server using websockets or gRPC.
+- Additional unit types with unique abilities.
+- Fog of war and scouting mechanics.
+- Dedicated matchmaking lobby and multiple concurrent matches.
+- Persistent player profiles and statistics.

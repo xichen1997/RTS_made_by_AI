@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChronoFront RTS</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="top-bar">
+        <h1>ChronoFront</h1>
+        <div class="player-info">
+          <span id="player-name">Connecting...</span>
+          <span id="player-credits">0</span>
+        </div>
+      </header>
+      <main class="game-area">
+        <canvas id="battlefield" width="960" height="640"></canvas>
+        <aside class="command-panel">
+          <section>
+            <h2>Production</h2>
+            <button data-unit="grunt">Train Grunt (120)</button>
+            <button data-unit="rocketeer">Train Rocketeer (180)</button>
+            <button data-unit="tank">Deploy Tank (320)</button>
+          </section>
+          <section>
+            <h2>Orders</h2>
+            <p>Left click to select units. Right click to issue a move command.</p>
+            <button id="set-rally">Set Rally Point</button>
+          </section>
+          <section>
+            <h2>Players</h2>
+            <ul id="player-list"></ul>
+          </section>
+          <section>
+            <h2>Events</h2>
+            <div id="event-log"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script src="/static/main.js" type="module"></script>
+  </body>
+</html>
