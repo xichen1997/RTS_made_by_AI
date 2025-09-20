@@ -355,22 +355,51 @@ class RTSGame:
             )
 
     def _spawn_starting_base(self, player: PlayerState, spawn: Tuple[float, float]) -> None:
-        hq = self._spawn_building(player, "hq", Vector2(spawn[0], spawn[1]))
-        factory_offset = Vector2(spawn[0] + 4, spawn[1] + 4)
-        factory = self._spawn_building(player, "factory", factory_offset)
-        player.buildings[hq.id] = hq
-        player.buildings[factory.id] = factory
-        self.buildings[hq.id] = hq
-        self.buildings[factory.id] = factory
+        yard = self._spawn_building(player, "construction_yard", Vector2(spawn[0], spawn[1]))
+        refinery = self._spawn_building(
+            player, "ore_refinery", Vector2(spawn[0] + 5, spawn[1] + 3)
+        )
+        power = self._spawn_building(
+            player, "power_plant", Vector2(spawn[0] - 6, spawn[1] + 2)
+        )
+        barracks = self._spawn_building(
+            player, "barracks", Vector2(spawn[0] + 3, spawn[1] - 5)
+        )
+        war_factory = self._spawn_building(
+            player, "war_factory", Vector2(spawn[0] + 9, spawn[1] + 6)
+        )
+        player.buildings[yard.id] = yard
+        player.buildings[refinery.id] = refinery
+        player.buildings[power.id] = power
+        player.buildings[barracks.id] = barracks
+        player.buildings[war_factory.id] = war_factory
+        self.buildings[yard.id] = yard
+        self.buildings[refinery.id] = refinery
+        self.buildings[power.id] = power
+        self.buildings[barracks.id] = barracks
+        self.buildings[war_factory.id] = war_factory
 
-        # Initial army
-        for _ in range(2):
-            soldier = self._spawn_unit(player, "soldier", near=factory.position)
-            player.units[soldier.id] = soldier
-            self.units[soldier.id] = soldier
-        harvester = self._spawn_unit(player, "harvester", near=hq.position)
-        player.units[harvester.id] = harvester
-        self.units[harvester.id] = harvester
+        # Starting forces: basic infantry squad, one advanced infantry and armor, plus an ore miner
+        for offset in (-1.5, 0.0, 1.5):
+            conscript = self._spawn_unit(
+                player,
+                "conscript",
+                near=Vector2(barracks.position.x + offset, barracks.position.y + 1.0),
+            )
+            player.units[conscript.id] = conscript
+            self.units[conscript.id] = conscript
+
+        gi = self._spawn_unit(player, "gi", near=barracks.position)
+        player.units[gi.id] = gi
+        self.units[gi.id] = gi
+
+        rhino = self._spawn_unit(player, "rhino_tank", near=war_factory.position)
+        player.units[rhino.id] = rhino
+        self.units[rhino.id] = rhino
+
+        miner = self._spawn_unit(player, "ore_miner", near=refinery.position)
+        player.units[miner.id] = miner
+        self.units[miner.id] = miner
 
     def _spawn_building(
         self, player: PlayerState, kind: str, position: Vector2
@@ -403,7 +432,7 @@ class RTSGame:
             attack_damage=stats["attack_damage"],
             attack_range=stats["attack_range"],
             attack_cooldown=stats["attack_cooldown"],
-            role="harvester" if unit_type == "harvester" else "combat",
+            role="harvester" if unit_type == "ore_miner" else "combat",
         )
         return unit
 
