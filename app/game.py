@@ -80,6 +80,10 @@ class RTSGame:
         """Add a command to be processed on the next tick."""
         self.command_queue.append((player_id, command))
 
+    @staticmethod
+    def _format_name(identifier: str) -> str:
+        return identifier.replace("_", " ").title()
+
     def _process_commands(self) -> None:
         while self.command_queue:
             player_id, command = self.command_queue.popleft()
@@ -153,7 +157,7 @@ class RTSGame:
             ProductionTask(unit_type=unit_type, remaining=stats["build_time"])
         )
         self.add_event(
-            f"{player.name} queued a {unit_type} at {building.kind.upper()}"
+            f"{player.name} queued a {self._format_name(unit_type)} at {self._format_name(building.kind)}"
         )
 
     # ------------------------------------------------------------------
@@ -182,7 +186,7 @@ class RTSGame:
             owner.units[unit.id] = unit
             self.units[unit.id] = unit
             self.add_event(
-                f"{owner.name} produced a {task.unit_type} at {building.kind.upper()}"
+                f"{owner.name} produced a {self._format_name(task.unit_type)} at {self._format_name(building.kind)}"
             )
 
     def _update_units(self, dt: float) -> None:
@@ -192,7 +196,7 @@ class RTSGame:
                 if owner:
                     owner.units.pop(unit.id, None)
                 self.units.pop(unit.id, None)
-                self.add_event(f"{unit.kind.title()} destroyed")
+                self.add_event(f"{self._format_name(unit.kind)} destroyed")
                 continue
 
             if unit.state == "moving" and unit.target_position:
@@ -256,7 +260,10 @@ class RTSGame:
                 if target_owner:
                     target_owner.buildings.pop(target.id, None)
                 self.buildings.pop(target.id, None)
-                self.add_event("A base structure has been destroyed!")
+                owner_name = target_owner.name if target_owner else "an unknown commander"
+                self.add_event(
+                    f"{self._format_name(target.kind)} belonging to {owner_name} destroyed!"
+                )
             unit.reset_orders()
 
     def _seek_and_attack(self, unit: Unit, dt: float) -> None:
@@ -355,22 +362,38 @@ class RTSGame:
             )
 
     def _spawn_starting_base(self, player: PlayerState, spawn: Tuple[float, float]) -> None:
-        hq = self._spawn_building(player, "hq", Vector2(spawn[0], spawn[1]))
-        factory_offset = Vector2(spawn[0] + 4, spawn[1] + 4)
-        factory = self._spawn_building(player, "factory", factory_offset)
-        player.buildings[hq.id] = hq
-        player.buildings[factory.id] = factory
-        self.buildings[hq.id] = hq
-        self.buildings[factory.id] = factory
+        base_center = Vector2(spawn[0], spawn[1])
+        layout = [
+            ("construction_yard", base_center.copy()),
+            ("power_plant", Vector2(base_center.x + 6, base_center.y - 4)),
+            ("ore_refinery", Vector2(base_center.x - 6, base_center.y + 4)),
+            ("barracks", Vector2(base_center.x + 8, base_center.y + 6)),
+            ("war_factory", Vector2(base_center.x + 14, base_center.y + 2)),
+            ("airforce_command", Vector2(base_center.x - 4, base_center.y + 10)),
+            ("prism_tower", Vector2(base_center.x + 4, base_center.y + 12)),
+        ]
 
-        # Initial army
-        for _ in range(2):
-            soldier = self._spawn_unit(player, "soldier", near=factory.position)
-            player.units[soldier.id] = soldier
-            self.units[soldier.id] = soldier
-        harvester = self._spawn_unit(player, "harvester", near=hq.position)
-        player.units[harvester.id] = harvester
-        self.units[harvester.id] = harvester
+        buildings_by_kind: Dict[str, Building] = {}
+        for kind, position in layout:
+            building = self._spawn_building(player, kind, position)
+            player.buildings[building.id] = building
+            self.buildings[building.id] = building
+            buildings_by_kind[kind] = building
+
+        initial_units = [
+            ("conscript", buildings_by_kind.get("barracks")),
+            ("conscript", buildings_by_kind.get("barracks")),
+            ("gi", buildings_by_kind.get("barracks")),
+            ("grizzly_tank", buildings_by_kind.get("war_factory")),
+            ("ifv", buildings_by_kind.get("war_factory")),
+            ("ore_miner", buildings_by_kind.get("ore_refinery")),
+        ]
+
+        for unit_type, anchor in initial_units:
+            anchor_position = anchor.position if anchor else base_center
+            unit = self._spawn_unit(player, unit_type, near=anchor_position)
+            player.units[unit.id] = unit
+            self.units[unit.id] = unit
 
     def _spawn_building(
         self, player: PlayerState, kind: str, position: Vector2
@@ -403,7 +426,7 @@ class RTSGame:
             attack_damage=stats["attack_damage"],
             attack_range=stats["attack_range"],
             attack_cooldown=stats["attack_cooldown"],
-            role="harvester" if unit_type == "harvester" else "combat",
+            role=stats.get("role", "combat"),
         )
         return unit
 
