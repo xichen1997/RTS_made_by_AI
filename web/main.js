@@ -8,7 +8,8 @@ const statusLabel = document.getElementById("status-indicator");
 const resourceDisplay = document.getElementById("resource-display");
 const eventLog = document.getElementById("event-log");
 const tooltip = document.getElementById("tooltip");
-const productionButtons = document.querySelectorAll("[data-unit]");
+const productionButtonsContainer = document.getElementById("production-buttons");
+const productionHint = document.getElementById("production-hint");
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -32,7 +33,7 @@ let roomId = roomInput.value;
 let playerColor = "#ffffff";
 let gameState = null;
 let selectedUnits = new Set();
-let selectedBuilding = null;
+let selectedBuilding = null; // { id: string, type: string } | null
 let mapSize = [96, 64];
 let lastHover = null;
 
@@ -49,10 +50,39 @@ const COLORS = {
   neutral: "#facc15",
 };
 
+const BASE_PRODUCTION_HINT = productionHint ? productionHint.textContent : "";
+
+const PRODUCTION_OPTIONS = {
+  construction_yard: [
+    { unit: "engineer", label: "Train Engineer" },
+  ],
+  ore_refinery: [
+    { unit: "ore_miner", label: "Deploy Ore Miner" },
+  ],
+  barracks: [
+    { unit: "conscript", label: "Train Conscript" },
+    { unit: "gi", label: "Deploy GI" },
+    { unit: "engineer", label: "Mobilize Engineer" },
+    { unit: "rocketeer", label: "Launch Rocketeer" },
+  ],
+  war_factory: [
+    { unit: "grizzly_tank", label: "Build Grizzly Tank" },
+    { unit: "ifv", label: "Assemble IFV" },
+    { unit: "mirage_tank", label: "Deploy Mirage Tank" },
+    { unit: "prism_tank", label: "Construct Prism Tank" },
+  ],
+  airforce_command: [
+    { unit: "rocketeer", label: "Launch Rocketeer" },
+  ],
+  power_plant: [],
+  prism_tower: [],
+};
+
 initializeMapGeometry();
 resizeRendererToDisplaySize();
 configureCamera();
 animate();
+renderProductionButtons(null);
 
 connectBtn.addEventListener("click", () => {
   if (socket) {
@@ -61,25 +91,6 @@ connectBtn.addEventListener("click", () => {
   roomId = roomInput.value.trim() || "alpha";
   const name = nameInput.value.trim() || `Commander-${Math.floor(Math.random() * 999)}`;
   openSocket(roomId, name);
-});
-
-productionButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      pushEvent("Connect to a room before issuing production commands.");
-      return;
-    }
-    if (!selectedBuilding) {
-      pushEvent("Select your HQ or Factory to train units.");
-      return;
-    }
-    const unitType = button.dataset.unit;
-    sendCommand({
-      action: "build_unit",
-      building_id: selectedBuilding,
-      unit_type: unitType,
-    });
-  });
 });
 
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -244,8 +255,17 @@ function openSocket(room, name) {
           selectedUnits.delete(id);
         }
       });
-      if (!gameState.buildings.some((b) => b.id === selectedBuilding)) {
-        selectedBuilding = null;
+      if (selectedBuilding) {
+        const matching = gameState.buildings.find(
+          (building) => building.id === selectedBuilding.id,
+        );
+        if (!matching) {
+          selectedBuilding = null;
+          renderProductionButtons(null);
+        } else {
+          selectedBuilding.type = matching.type;
+          renderProductionButtons(selectedBuilding.type);
+        }
       }
       updateEventLog(gameState.events || []);
       syncScene();
@@ -260,6 +280,7 @@ function openSocket(room, name) {
     playerId = null;
     selectedUnits.clear();
     selectedBuilding = null;
+    renderProductionButtons(null);
   });
 }
 
@@ -274,6 +295,7 @@ function handleSelection(picked, additive) {
     selectedBuilding = null;
   }
   if (!picked) {
+    renderProductionButtons(selectedBuilding ? selectedBuilding.type : null);
     return;
   }
   if (picked.owner === playerId && picked.kind === "unit") {
@@ -283,8 +305,16 @@ function handleSelection(picked, additive) {
       selectedUnits.add(picked.id);
     }
   } else if (picked.owner === playerId && picked.kind === "building") {
-    selectedBuilding = picked.id;
+    if (selectedBuilding && selectedBuilding.id === picked.id && additive) {
+      selectedBuilding = null;
+    } else {
+      selectedBuilding = { id: picked.id, type: picked.type };
+    }
+  } else if (!additive) {
+    selectedUnits.clear();
+    selectedBuilding = null;
   }
+  renderProductionButtons(selectedBuilding ? selectedBuilding.type : null);
 }
 
 function handleCommand(target, groundPoint) {
@@ -316,6 +346,41 @@ function handleCommand(target, groundPoint) {
       unit_ids: unitIds,
       position: { x: groundPoint.x, y: groundPoint.y },
     });
+  }
+}
+
+function renderProductionButtons(buildingType) {
+  if (!productionButtonsContainer || !productionHint) return;
+  productionButtonsContainer.innerHTML = "";
+  if (!buildingType) {
+    productionHint.textContent = BASE_PRODUCTION_HINT;
+    return;
+  }
+  const options = PRODUCTION_OPTIONS[buildingType] || [];
+  if (options.length === 0) {
+    productionHint.textContent = `${formatLabel(buildingType)} cannot produce units.`;
+    return;
+  }
+  productionHint.textContent = `Queue units at ${formatLabel(buildingType)}.`;
+  for (const option of options) {
+    const button = document.createElement("button");
+    button.textContent = option.label;
+    button.addEventListener("click", () => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        pushEvent("Connect to a room before issuing production commands.");
+        return;
+      }
+      if (!selectedBuilding) {
+        pushEvent("Select a production structure before queuing units.");
+        return;
+      }
+      sendCommand({
+        action: "build_unit",
+        building_id: selectedBuilding.id,
+        unit_type: option.unit,
+      });
+    });
+    productionButtonsContainer.appendChild(button);
   }
 }
 
@@ -433,7 +498,13 @@ function createUnitMesh(unit) {
     emissive: new THREE.Color(0x000000),
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = { id: unit.id, owner: unit.owner, kind: "unit", label: "" };
+  mesh.userData = {
+    id: unit.id,
+    owner: unit.owner,
+    kind: "unit",
+    label: "",
+    type: unit.type,
+  };
   return mesh;
 }
 
@@ -443,11 +514,17 @@ function updateUnitMesh(mesh, unit) {
   mesh.position.set(ux, height / 2, uy);
   mesh.material.color.set(getPlayerColor(unit.owner));
   mesh.userData.owner = unit.owner;
-  mesh.userData.label = `${unit.type.toUpperCase()} (${unit.hp}/${unit.max_hp})`;
+  mesh.userData.type = unit.type;
+  mesh.userData.label = `${formatLabel(unit.type)} (${unit.hp}/${unit.max_hp})`;
 }
 
 function createBuildingMesh(building) {
-  const geometry = new THREE.BoxGeometry(8, 6, 8);
+  const dimensions = getBuildingDimensions(building.type);
+  const geometry = new THREE.BoxGeometry(
+    dimensions.width,
+    dimensions.height,
+    dimensions.depth,
+  );
   const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color(getPlayerColor(building.owner)),
     roughness: 0.6,
@@ -455,16 +532,24 @@ function createBuildingMesh(building) {
     emissive: new THREE.Color(0x000000),
   });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = { id: building.id, owner: building.owner, kind: "building", label: "" };
+  mesh.userData = {
+    id: building.id,
+    owner: building.owner,
+    kind: "building",
+    label: "",
+    type: building.type,
+  };
   return mesh;
 }
 
 function updateBuildingMesh(mesh, building) {
   const [bx, by] = building.position;
-  mesh.position.set(bx, 3, by);
+  const dimensions = getBuildingDimensions(building.type);
+  mesh.position.set(bx, dimensions.height / 2, by);
   mesh.material.color.set(getPlayerColor(building.owner));
   mesh.userData.owner = building.owner;
-  mesh.userData.label = `${building.type.toUpperCase()} (${building.hp}/${building.max_hp})`;
+  mesh.userData.type = building.type;
+  mesh.userData.label = `${formatLabel(building.type)} (${building.hp}/${building.max_hp})`;
 }
 
 function createResourceMesh(resource) {
@@ -501,7 +586,7 @@ function updateSelectionHighlights() {
     mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
   }
   for (const [id, mesh] of buildingMeshes.entries()) {
-    const isSelected = selectedBuilding === id;
+    const isSelected = selectedBuilding && selectedBuilding.id === id;
     mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
   }
 }
@@ -514,14 +599,55 @@ function getPlayerColor(owner) {
   return player.color || COLORS.enemy;
 }
 
+function formatLabel(identifier) {
+  if (!identifier) return "";
+  return identifier
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function getUnitDimensions(type) {
   switch (type) {
-    case "tank":
-      return { radius: 2.8, height: 2.4, segments: 20 };
-    case "harvester":
-      return { radius: 2.6, height: 2.2, segments: 16 };
+    case "ore_miner":
+      return { radius: 3.2, height: 3.0, segments: 18 };
+    case "grizzly_tank":
+    case "mirage_tank":
+      return { radius: 3.0, height: 2.6, segments: 20 };
+    case "prism_tank":
+      return { radius: 3.2, height: 2.8, segments: 22 };
+    case "ifv":
+      return { radius: 2.4, height: 2.2, segments: 18 };
+    case "gi":
+      return { radius: 1.3, height: 2.0, segments: 12 };
+    case "rocketeer":
+      return { radius: 1.2, height: 2.2, segments: 12 };
+    case "conscript":
+    case "engineer":
+      return { radius: 1.1, height: 1.8, segments: 12 };
     default:
       return { radius: 1.6, height: 1.8, segments: 12 };
+  }
+}
+
+function getBuildingDimensions(type) {
+  switch (type) {
+    case "construction_yard":
+      return { width: 12, height: 8, depth: 12 };
+    case "war_factory":
+      return { width: 14, height: 7, depth: 10 };
+    case "barracks":
+      return { width: 9, height: 6, depth: 9 };
+    case "ore_refinery":
+      return { width: 10, height: 6, depth: 10 };
+    case "power_plant":
+      return { width: 8, height: 7, depth: 8 };
+    case "airforce_command":
+      return { width: 11, height: 7, depth: 11 };
+    case "prism_tower":
+      return { width: 4, height: 12, depth: 4 };
+    default:
+      return { width: 8, height: 6, depth: 8 };
   }
 }
 

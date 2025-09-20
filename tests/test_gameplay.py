@@ -22,12 +22,17 @@ def test_player_join_spawns_base() -> None:
 def test_production_queue_creates_units() -> None:
     game = RTSGame("room")
     player = game.add_player("p1", "Builder")
-    hq = next(iter(player.buildings.values()))
+    barracks = next(b for b in player.buildings.values() if b.kind == "barracks")
     game.enqueue_command(
-        "p1", {"action": "build_unit", "building_id": hq.id, "unit_type": "soldier"}
+        "p1",
+        {
+            "action": "build_unit",
+            "building_id": barracks.id,
+            "unit_type": "conscript",
+        },
     )
     run_updates(game, seconds=6.0)
-    assert any(unit.kind == "soldier" for unit in player.units.values())
+    assert any(unit.kind == "conscript" for unit in player.units.values())
     assert player.credits < config.STARTING_CREDITS
 
 
@@ -35,8 +40,8 @@ def test_combat_units_destroy_targets() -> None:
     game = RTSGame("room")
     p1 = game.add_player("p1", "Alpha")
     p2 = game.add_player("p2", "Bravo")
-    attacker = next(iter(p1.units.values()))
-    defender = next(iter(p2.units.values()))
+    attacker = next(unit for unit in p1.units.values() if unit.role == "combat")
+    defender = next(unit for unit in p2.units.values() if unit.role == "combat")
     attacker.position = Vector2(20, 20)
     defender.position = Vector2(21, 20)
     game.enqueue_command(
