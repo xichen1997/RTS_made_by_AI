@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Red Horizon Online</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <header class="hud">
+      <h1>Red Horizon Online</h1>
+      <div class="connection-panel">
+        <label>
+          Room ID
+          <input id="room-input" type="text" value="alpha" />
+        </label>
+        <label>
+          Commander
+          <input id="name-input" type="text" placeholder="Your name" />
+        </label>
+        <button id="connect-btn">Join Match</button>
+        <span id="status-indicator">Disconnected</span>
+      </div>
+      <div class="resources" id="resource-display">Credits: 0</div>
+    </header>
+
+    <main class="layout">
+      <section class="canvas-wrapper">
+        <canvas id="battlefield" width="960" height="640"></canvas>
+        <div class="overlay" id="tooltip"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Production</h2>
+          <div class="button-grid">
+            <button data-unit="harvester">Train Harvester</button>
+            <button data-unit="soldier">Train Soldier</button>
+            <button data-unit="tank">Construct Tank</button>
+          </div>
+          <p class="hint">
+            Select your headquarters or factory to use production commands.
+          </p>
+        </section>
+        <section class="panel">
+          <h2>Orders</h2>
+          <ul>
+            <li>Left click units to select / deselect.</li>
+            <li>Right click terrain to move.</li>
+            <li>Right click enemies to attack.</li>
+            <li>
+              Use the resource panel buttons to assign harvesters to resource
+              nodes.
+            </li>
+          </ul>
+        </section>
+        <section class="panel">
+          <h2>Battle Log</h2>
+          <div id="event-log" class="event-log"></div>
+        </section>
+      </aside>
+    </main>
+
+    <footer>
+      <p>
+        Built for cooperative browser play. Open this page in multiple tabs and
+        join the same room to wage war against friends.
+      </p>
+    </footer>
+
+    <script src="assets/main.js" type="module"></script>
+  </body>
+</html>
