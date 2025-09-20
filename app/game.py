@@ -245,8 +245,9 @@ class RTSGame:
             unit.position.move_towards(target.position, unit.speed * dt)
             return
         if unit.current_cooldown > 0:
-            unit.current_cooldown -= dt
-            return
+            unit.current_cooldown = max(unit.current_cooldown - dt, 0.0)
+            if unit.current_cooldown > 0:
+                return
         target.take_damage(unit.attack_damage)
         unit.current_cooldown = unit.attack_cooldown
         if not target.is_alive():
@@ -365,12 +366,12 @@ class RTSGame:
         base_center = Vector2(spawn[0], spawn[1])
         layout = [
             ("construction_yard", base_center.copy()),
-            ("power_plant", Vector2(base_center.x + 6, base_center.y - 4)),
-            ("ore_refinery", Vector2(base_center.x - 6, base_center.y + 4)),
-            ("barracks", Vector2(base_center.x + 8, base_center.y + 6)),
-            ("war_factory", Vector2(base_center.x + 14, base_center.y + 2)),
-            ("airforce_command", Vector2(base_center.x - 4, base_center.y + 10)),
-            ("prism_tower", Vector2(base_center.x + 4, base_center.y + 12)),
+            ("power_plant", Vector2(base_center.x + 14, base_center.y - 10)),
+            ("ore_refinery", Vector2(base_center.x - 16, base_center.y + 12)),
+            ("barracks", Vector2(base_center.x + 6, base_center.y + 18)),
+            ("war_factory", Vector2(base_center.x + 20, base_center.y + 6)),
+            ("airforce_command", Vector2(base_center.x - 8, base_center.y + 24)),
+            ("prism_tower", Vector2(base_center.x + 10, base_center.y + 28)),
         ]
 
         buildings_by_kind: Dict[str, Building] = {}
