@@ -34,7 +34,7 @@ let playerColor = "#ffffff";
 let gameState = null;
 let selectedUnits = new Set();
 let selectedBuilding = null; // { id: string, type: string } | null
-let mapSize = [96, 64];
+let mapSize = [160, 120];
 let lastHover = null;
 
 let ground = null;
