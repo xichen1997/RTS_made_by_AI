@@ -55,6 +55,19 @@ The dependencies include tooling for tests and legacy rendering
 experiments. They are lightweight and allow you to run the backend demo
 as well as revisit the earlier Pygame prototypes if desired.
 
+## Running the Nova Frontier web app
+
+Install the dependencies and launch the FastAPI application with Uvicorn:
+
+```
+uvicorn webapp.server:app --reload --host 0.0.0.0 --port 8000
+```
+
+Open <http://localhost:8000> in two browser windows and join the skirmish with
+your preferred callsigns. Commands are issued by left-clicking to select a unit
+and right-clicking the battlefield to move or attack. Production buttons on the
+left panel queue harvesters and infantry.
+
 ## Running the demo
 
 With the environment prepared, execute the main entry point:

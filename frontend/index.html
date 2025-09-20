@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nova Frontier RTS</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="branding">
+        <h1>Nova Frontier</h1>
+        <p class="tagline">Web-based RTS skirmish inspired by the classics.</p>
+      </div>
+      <div class="controls">
+        <label for="player-name">Callsign</label>
+        <input id="player-name" type="text" maxlength="18" value="Commander" />
+        <button id="join-button">Join Skirmish</button>
+      </div>
+      <div class="resources">
+        <div>Credits: <span id="credits">0</span></div>
+        <div>Status: <span id="status">Idle</span></div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section>
+          <h2>Production</h2>
+          <button data-command="build" data-type="harvester">Train Harvester</button>
+          <button data-command="build" data-type="infantry">Train Infantry</button>
+        </section>
+        <section>
+          <h2>Orders</h2>
+          <p>Select a unit in the battlefield and right click to issue orders.</p>
+        </section>
+        <section class="legend">
+          <h2>Legend</h2>
+          <ul>
+            <li><span class="legend-icon resource"></span> Resource field</li>
+            <li><span class="legend-icon base"></span> Base</li>
+            <li><span class="legend-icon infantry"></span> Infantry</li>
+            <li><span class="legend-icon harvester"></span> Harvester</li>
+          </ul>
+        </section>
+      </aside>
+      <section class="battlefield">
+        <canvas id="battle-canvas" width="960" height="720"></canvas>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Built as a proof of concept for a browser-playable RTS. Share the URL
+        with a friend to battle in real time!
+      </p>
+    </footer>
+
+    <script type="module" src="/static/main.js"></script>
+  </body>
+</html>
