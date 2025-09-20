@@ -1,0 +1,3 @@
+pytest>=7.0
+pygame>=2.1
+noise>=1.2
