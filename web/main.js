@@ -1,5 +1,6 @@
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
+
 const canvas = document.getElementById("battlefield");
-const ctx = canvas.getContext("2d");
 const connectBtn = document.getElementById("connect-btn");
 const roomInput = document.getElementById("room-input");
 const nameInput = document.getElementById("name-input");
@@ -8,6 +9,22 @@ const resourceDisplay = document.getElementById("resource-display");
 const eventLog = document.getElementById("event-log");
 const tooltip = document.getElementById("tooltip");
 const productionButtons = document.querySelectorAll("[data-unit]");
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020617);
+
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+sun.position.set(100, 200, 100);
+scene.add(sun);
+
+const pointer = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
 
 let socket = null;
 let playerId = null;
@@ -19,12 +36,23 @@ let selectedBuilding = null;
 let mapSize = [96, 64];
 let lastHover = null;
 
+let ground = null;
+let gridHelper = null;
+const unitMeshes = new Map();
+const buildingMeshes = new Map();
+const resourceMeshes = new Map();
+
+const selectionColor = new THREE.Color("#38bdf8");
+
 const COLORS = {
-  grid: "#0f172a",
   enemy: "#ef4444",
   neutral: "#facc15",
-  selection: "#38bdf8",
 };
+
+initializeMapGeometry();
+resizeRendererToDisplaySize();
+configureCamera();
+animate();
 
 connectBtn.addEventListener("click", () => {
   if (socket) {
@@ -55,36 +83,129 @@ productionButtons.forEach((button) => {
 });
 
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
 canvas.addEventListener("mousedown", (event) => {
   if (!gameState) {
     return;
   }
-  const rect = canvas.getBoundingClientRect();
-  const x = ((event.clientX - rect.left) / rect.width) * mapSize[0];
-  const y = ((event.clientY - rect.top) / rect.height) * mapSize[1];
-
+  const picked = pickEntityAtEvent(event);
   if (event.button === 0) {
-    handleSelection(x, y, event.shiftKey);
+    handleSelection(picked, event.shiftKey);
   } else if (event.button === 2) {
-    handleCommand(x, y);
+    const groundPoint = getGroundPoint(event);
+    handleCommand(picked, groundPoint);
   }
 });
 
 canvas.addEventListener("mousemove", (event) => {
   if (!gameState) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = ((event.clientX - rect.left) / rect.width) * mapSize[0];
-  const y = ((event.clientY - rect.top) / rect.height) * mapSize[1];
-  const hoverInfo = pickEntity(x, y);
-  if (hoverInfo && hoverInfo.id !== lastHover) {
-    tooltip.textContent = hoverInfo.label;
+  const hovered = pickEntityAtEvent(event);
+  if (hovered && hovered.id !== lastHover) {
+    tooltip.textContent = hovered.label;
     tooltip.style.opacity = 1;
-    lastHover = hoverInfo.id;
-  } else if (!hoverInfo) {
+    lastHover = hovered.id;
+  } else if (!hovered) {
     tooltip.style.opacity = 0;
     lastHover = null;
   }
 });
+
+canvas.addEventListener("mouseleave", () => {
+  tooltip.style.opacity = 0;
+  lastHover = null;
+});
+
+window.addEventListener("resize", () => {
+  resizeRendererToDisplaySize();
+  configureCamera();
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  resizeRendererToDisplaySize();
+  updateSelectionHighlights();
+  renderer.render(scene, camera);
+}
+
+function resizeRendererToDisplaySize() {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const pixelRatio = Math.min(window.devicePixelRatio, 2);
+  const displayWidth = Math.floor(width * pixelRatio);
+  const displayHeight = Math.floor(height * pixelRatio);
+  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(width, height, false);
+    configureCamera();
+  }
+}
+
+function initializeMapGeometry() {
+  if (ground) {
+    scene.remove(ground);
+    ground.geometry.dispose();
+    ground.material.dispose();
+  }
+  if (gridHelper) {
+    scene.remove(gridHelper);
+    gridHelper.geometry.dispose?.();
+    gridHelper.material.dispose?.();
+  }
+
+  const [mapWidth, mapHeight] = mapSize;
+
+  const planeGeometry = new THREE.PlaneGeometry(
+    mapWidth,
+    mapHeight,
+    Math.max(Math.floor(mapWidth / 4), 1),
+    Math.max(Math.floor(mapHeight / 4), 1),
+  );
+  const planeMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    side: THREE.DoubleSide,
+    roughness: 1,
+    metalness: 0,
+  });
+  ground = new THREE.Mesh(planeGeometry, planeMaterial);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(mapWidth / 2, 0, mapHeight / 2);
+  scene.add(ground);
+
+  const maxSize = Math.max(mapWidth, mapHeight);
+  gridHelper = new THREE.GridHelper(maxSize, Math.max(Math.floor(maxSize / 4), 1), 0x0f172a, 0x0f172a);
+  gridHelper.material.opacity = 0.25;
+  gridHelper.material.transparent = true;
+  gridHelper.scale.set(mapWidth / maxSize, 1, mapHeight / maxSize);
+  gridHelper.position.set(mapWidth / 2, 0.02, mapHeight / 2);
+  scene.add(gridHelper);
+}
+
+function configureCamera() {
+  const [mapWidth, mapHeight] = mapSize;
+  const aspect = canvas.clientWidth / canvas.clientHeight || 1;
+  const viewSize = Math.max(mapWidth, mapHeight) * 0.75;
+
+  camera.left = -viewSize * aspect;
+  camera.right = viewSize * aspect;
+  camera.top = viewSize;
+  camera.bottom = -viewSize;
+  camera.near = 0.1;
+  camera.far = 4000;
+
+  const centerX = mapWidth / 2;
+  const centerZ = mapHeight / 2;
+  const distance = Math.max(mapWidth, mapHeight) * 1.25;
+  const theta = Math.PI / 4;
+  const phi = THREE.MathUtils.degToRad(35);
+  const x = centerX + distance * Math.cos(phi) * Math.sin(theta);
+  const y = distance * Math.sin(phi);
+  const z = centerZ + distance * Math.cos(phi) * Math.cos(theta);
+
+  camera.position.set(x, y, z);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(centerX, 0, centerZ);
+  camera.updateProjectionMatrix();
+}
 
 function openSocket(room, name) {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -103,8 +224,15 @@ function openSocket(room, name) {
       playerId = message.player_id;
       pushEvent(`Welcome commander ${message.player_name}.`);
     } else if (message.type === "state") {
+      const incomingSize = message.state.map_size;
+      if (incomingSize[0] !== mapSize[0] || incomingSize[1] !== mapSize[1]) {
+        mapSize = incomingSize;
+        initializeMapGeometry();
+        configureCamera();
+      } else {
+        mapSize = incomingSize;
+      }
       gameState = message.state;
-      mapSize = message.state.map_size;
       const player = gameState.players[playerId];
       if (player) {
         resourceDisplay.textContent = `Credits: ${player.credits}`;
@@ -120,7 +248,7 @@ function openSocket(room, name) {
         selectedBuilding = null;
       }
       updateEventLog(gameState.events || []);
-      draw();
+      syncScene();
     } else if (message.type === "event") {
       pushEvent(message.message);
     }
@@ -140,8 +268,7 @@ function sendCommand(command) {
   socket.send(JSON.stringify({ type: "command", command }));
 }
 
-function handleSelection(x, y, additive) {
-  const picked = pickEntity(x, y);
+function handleSelection(picked, additive) {
   if (!additive) {
     selectedUnits.clear();
     selectedBuilding = null;
@@ -160,11 +287,10 @@ function handleSelection(x, y, additive) {
   }
 }
 
-function handleCommand(x, y) {
+function handleCommand(target, groundPoint) {
   if (selectedUnits.size === 0) {
     return;
   }
-  const target = pickEntity(x, y);
   const unitIds = Array.from(selectedUnits);
   if (target) {
     if (target.kind === "resource") {
@@ -184,126 +310,199 @@ function handleCommand(x, y) {
       return;
     }
   }
-  sendCommand({
-    action: "move",
-    unit_ids: unitIds,
-    position: { x, y },
+  if (groundPoint) {
+    sendCommand({
+      action: "move",
+      unit_ids: unitIds,
+      position: { x: groundPoint.x, y: groundPoint.y },
+    });
+  }
+}
+
+function pickEntityAtEvent(event) {
+  const pickables = [
+    ...unitMeshes.values(),
+    ...buildingMeshes.values(),
+    ...resourceMeshes.values(),
+  ];
+  if (pickables.length === 0) {
+    return null;
+  }
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const intersections = raycaster.intersectObjects(pickables, false);
+  if (intersections.length === 0) {
+    return null;
+  }
+  const data = intersections[0].object.userData;
+  return data ? { ...data } : null;
+}
+
+function getGroundPoint(event) {
+  if (!ground) return null;
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const intersection = raycaster.intersectObject(ground, false)[0];
+  if (!intersection) {
+    return null;
+  }
+  return {
+    x: THREE.MathUtils.clamp(intersection.point.x, 0, mapSize[0]),
+    y: THREE.MathUtils.clamp(intersection.point.z, 0, mapSize[1]),
+  };
+}
+
+function syncScene() {
+  if (!gameState) return;
+  updateUnits();
+  updateBuildings();
+  updateResources();
+}
+
+function updateUnits() {
+  const seen = new Set();
+  for (const unit of gameState.units) {
+    seen.add(unit.id);
+    let mesh = unitMeshes.get(unit.id);
+    if (!mesh) {
+      mesh = createUnitMesh(unit);
+      unitMeshes.set(unit.id, mesh);
+      scene.add(mesh);
+    }
+    updateUnitMesh(mesh, unit);
+  }
+  for (const [id, mesh] of unitMeshes.entries()) {
+    if (!seen.has(id)) {
+      disposeMesh(mesh);
+      unitMeshes.delete(id);
+    }
+  }
+}
+
+function updateBuildings() {
+  const seen = new Set();
+  for (const building of gameState.buildings) {
+    seen.add(building.id);
+    let mesh = buildingMeshes.get(building.id);
+    if (!mesh) {
+      mesh = createBuildingMesh(building);
+      buildingMeshes.set(building.id, mesh);
+      scene.add(mesh);
+    }
+    updateBuildingMesh(mesh, building);
+  }
+  for (const [id, mesh] of buildingMeshes.entries()) {
+    if (!seen.has(id)) {
+      disposeMesh(mesh);
+      buildingMeshes.delete(id);
+    }
+  }
+}
+
+function updateResources() {
+  const seen = new Set();
+  for (const resource of gameState.resources) {
+    seen.add(resource.id);
+    let mesh = resourceMeshes.get(resource.id);
+    if (!mesh) {
+      mesh = createResourceMesh(resource);
+      resourceMeshes.set(resource.id, mesh);
+      scene.add(mesh);
+    }
+    updateResourceMesh(mesh, resource);
+  }
+  for (const [id, mesh] of resourceMeshes.entries()) {
+    if (!seen.has(id)) {
+      disposeMesh(mesh);
+      resourceMeshes.delete(id);
+    }
+  }
+}
+
+function createUnitMesh(unit) {
+  const { radius, height, segments } = getUnitDimensions(unit.type);
+  const geometry = new THREE.CylinderGeometry(radius, radius, height, segments);
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(getPlayerColor(unit.owner)),
+    roughness: 0.4,
+    metalness: 0.2,
+    emissive: new THREE.Color(0x000000),
   });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData = { id: unit.id, owner: unit.owner, kind: "unit", label: "" };
+  return mesh;
 }
 
-function pickEntity(x, y) {
-  if (!gameState) return null;
-  const threshold = 2.5;
-  // Units
-  for (const unit of gameState.units) {
-    const dx = unit.position[0] - x;
-    const dy = unit.position[1] - y;
-    if (Math.hypot(dx, dy) < threshold) {
-      return {
-        id: unit.id,
-        owner: unit.owner,
-        label: `${unit.type.toUpperCase()} (${unit.hp}/${unit.max_hp})`,
-        kind: "unit",
-      };
-    }
-  }
-  // Buildings
-  for (const building of gameState.buildings) {
-    const [bx, by] = building.position;
-    const size = 4;
-    if (x >= bx - size && x <= bx + size && y >= by - size && y <= by + size) {
-      return {
-        id: building.id,
-        owner: building.owner,
-        label: `${building.type.toUpperCase()} (${building.hp}/${building.max_hp})`,
-        kind: "building",
-      };
-    }
-  }
-  // Resources
-  for (const resource of gameState.resources) {
-    const dx = resource.position[0] - x;
-    const dy = resource.position[1] - y;
-    if (Math.hypot(dx, dy) < threshold + 1.5) {
-      return {
-        id: resource.id,
-        owner: null,
-        label: `Resource Field (${resource.remaining.toFixed(0)} credits)`,
-        kind: "resource",
-      };
-    }
-  }
-  return null;
+function updateUnitMesh(mesh, unit) {
+  const { height } = getUnitDimensions(unit.type);
+  const [ux, uy] = unit.position;
+  mesh.position.set(ux, height / 2, uy);
+  mesh.material.color.set(getPlayerColor(unit.owner));
+  mesh.userData.owner = unit.owner;
+  mesh.userData.label = `${unit.type.toUpperCase()} (${unit.hp}/${unit.max_hp})`;
 }
 
-function draw() {
-  if (!gameState) {
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    return;
-  }
-  const [mapWidth, mapHeight] = mapSize;
-  const sx = canvas.width / mapWidth;
-  const sy = canvas.height / mapHeight;
+function createBuildingMesh(building) {
+  const geometry = new THREE.BoxGeometry(8, 6, 8);
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(getPlayerColor(building.owner)),
+    roughness: 0.6,
+    metalness: 0.1,
+    emissive: new THREE.Color(0x000000),
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData = { id: building.id, owner: building.owner, kind: "building", label: "" };
+  return mesh;
+}
 
-  ctx.fillStyle = "#020617";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+function updateBuildingMesh(mesh, building) {
+  const [bx, by] = building.position;
+  mesh.position.set(bx, 3, by);
+  mesh.material.color.set(getPlayerColor(building.owner));
+  mesh.userData.owner = building.owner;
+  mesh.userData.label = `${building.type.toUpperCase()} (${building.hp}/${building.max_hp})`;
+}
 
-  // Grid
-  ctx.strokeStyle = COLORS.grid;
-  ctx.lineWidth = 1;
-  for (let gx = 0; gx <= mapWidth; gx += 4) {
-    ctx.beginPath();
-    ctx.moveTo(gx * sx, 0);
-    ctx.lineTo(gx * sx, canvas.height);
-    ctx.stroke();
-  }
-  for (let gy = 0; gy <= mapHeight; gy += 4) {
-    ctx.beginPath();
-    ctx.moveTo(0, gy * sy);
-    ctx.lineTo(canvas.width, gy * sy);
-    ctx.stroke();
-  }
+function createResourceMesh(resource) {
+  const geometry = new THREE.CylinderGeometry(2.2, 3, 1.5, 8);
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(COLORS.neutral),
+    roughness: 0.9,
+    metalness: 0,
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData = { id: resource.id, owner: null, kind: "resource", label: "" };
+  return mesh;
+}
 
-  // Resources
-  for (const resource of gameState.resources) {
-    ctx.fillStyle = COLORS.neutral;
-    const [rx, ry] = resource.position;
-    ctx.beginPath();
-    ctx.arc(rx * sx, ry * sy, 6, 0, Math.PI * 2);
-    ctx.fill();
-  }
+function updateResourceMesh(mesh, resource) {
+  const [rx, ry] = resource.position;
+  mesh.position.set(rx, 0.75, ry);
+  mesh.userData.label = `Resource Field (${resource.remaining.toFixed(0)} credits)`;
+}
 
-  // Buildings
-  for (const building of gameState.buildings) {
-    const [bx, by] = building.position;
-    const color = getPlayerColor(building.owner);
-    const width = 12;
-    const height = 12;
-    ctx.fillStyle = color;
-    ctx.fillRect(bx * sx - width / 2, by * sy - height / 2, width, height);
-    if (selectedBuilding === building.id) {
-      ctx.strokeStyle = COLORS.selection;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(bx * sx - width / 2 - 3, by * sy - height / 2 - 3, width + 6, height + 6);
-    }
+function disposeMesh(mesh) {
+  scene.remove(mesh);
+  mesh.geometry.dispose();
+  if (Array.isArray(mesh.material)) {
+    mesh.material.forEach((material) => material.dispose());
+  } else {
+    mesh.material.dispose();
   }
+}
 
-  // Units
-  for (const unit of gameState.units) {
-    const [ux, uy] = unit.position;
-    const radius = unit.type === "tank" ? 6 : 4;
-    ctx.fillStyle = getPlayerColor(unit.owner);
-    ctx.beginPath();
-    ctx.arc(ux * sx, uy * sy, radius, 0, Math.PI * 2);
-    ctx.fill();
-    if (selectedUnits.has(unit.id)) {
-      ctx.strokeStyle = COLORS.selection;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(ux * sx, uy * sy, radius + 3, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+function updateSelectionHighlights() {
+  for (const [id, mesh] of unitMeshes.entries()) {
+    const isSelected = selectedUnits.has(id);
+    mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
+  }
+  for (const [id, mesh] of buildingMeshes.entries()) {
+    const isSelected = selectedBuilding === id;
+    mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
   }
 }
 
@@ -313,6 +512,17 @@ function getPlayerColor(owner) {
   const player = gameState.players[owner];
   if (!player) return COLORS.enemy;
   return player.color || COLORS.enemy;
+}
+
+function getUnitDimensions(type) {
+  switch (type) {
+    case "tank":
+      return { radius: 2.8, height: 2.4, segments: 20 };
+    case "harvester":
+      return { radius: 2.6, height: 2.2, segments: 16 };
+    default:
+      return { radius: 1.6, height: 1.8, segments: 12 };
+  }
 }
 
 function pushEvent(message) {
@@ -329,6 +539,3 @@ function updateEventLog(events) {
   if (!events || events.length === 0) return;
   events.forEach((message) => pushEvent(message));
 }
-
-// Kick off a render so the canvas isn't blank before joining.
-draw();
