@@ -1,6 +1,5 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
-
 const canvas = document.getElementById("battlefield");
+const ctx = canvas.getContext("2d");
 const connectBtn = document.getElementById("connect-btn");
 const roomInput = document.getElementById("room-input");
 const nameInput = document.getElementById("name-input");
@@ -11,22 +10,6 @@ const tooltip = document.getElementById("tooltip");
 const productionButtonsContainer = document.getElementById("production-buttons");
 const productionHint = document.getElementById("production-hint");
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x020617);
-
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-sun.position.set(100, 200, 100);
-scene.add(sun);
-
-const pointer = new THREE.Vector2();
-const raycaster = new THREE.Raycaster();
-
 let socket = null;
 let playerId = null;
 let roomId = roomInput.value;
@@ -36,14 +19,15 @@ let selectedUnits = new Set();
 let selectedBuilding = null; // { id: string, type: string } | null
 let mapSize = [160, 120];
 let lastHover = null;
+let deviceRatio = 1;
+let scaleX = 1;
+let scaleY = 1;
 
-let ground = null;
-let gridHelper = null;
-const unitMeshes = new Map();
-const buildingMeshes = new Map();
-const resourceMeshes = new Map();
+const units = new Map();
+const buildings = new Map();
+const resources = new Map();
 
-const selectionColor = new THREE.Color("#38bdf8");
+const selectionColor = "#38bdf8";
 
 const COLORS = {
   enemy: "#ef4444",
@@ -64,9 +48,8 @@ const PRODUCTION_LABELS = {
   prism_tank: "Construct Prism Tank",
 };
 
-initializeMapGeometry();
+initializeCanvas();
 resizeRendererToDisplaySize();
-configureCamera();
 animate();
 renderProductionButtons(null);
 
@@ -114,94 +97,35 @@ canvas.addEventListener("mouseleave", () => {
 
 window.addEventListener("resize", () => {
   resizeRendererToDisplaySize();
-  configureCamera();
 });
 
 function animate() {
   requestAnimationFrame(animate);
-  resizeRendererToDisplaySize();
-  updateSelectionHighlights();
-  renderer.render(scene, camera);
+  drawScene();
+}
+
+function initializeCanvas() {
+  if (!ctx) {
+    throw new Error("Unable to acquire 2D rendering context for battlefield canvas.");
+  }
+  ctx.imageSmoothingEnabled = true;
 }
 
 function resizeRendererToDisplaySize() {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const pixelRatio = Math.min(window.devicePixelRatio, 2);
-  const displayWidth = Math.floor(width * pixelRatio);
-  const displayHeight = Math.floor(height * pixelRatio);
-  if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-    renderer.setPixelRatio(pixelRatio);
-    renderer.setSize(width, height, false);
-    configureCamera();
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(Math.floor(rect.width), 1);
+  const height = Math.max(Math.floor(rect.height), 1);
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
   }
-}
-
-function initializeMapGeometry() {
-  if (ground) {
-    scene.remove(ground);
-    ground.geometry.dispose();
-    ground.material.dispose();
-  }
-  if (gridHelper) {
-    scene.remove(gridHelper);
-    gridHelper.geometry.dispose?.();
-    gridHelper.material.dispose?.();
-  }
-
-  const [mapWidth, mapHeight] = mapSize;
-
-  const planeGeometry = new THREE.PlaneGeometry(
-    mapWidth,
-    mapHeight,
-    Math.max(Math.floor(mapWidth / 4), 1),
-    Math.max(Math.floor(mapHeight / 4), 1),
-  );
-  const planeMaterial = new THREE.MeshStandardMaterial({
-    color: 0x0f172a,
-    side: THREE.DoubleSide,
-    roughness: 1,
-    metalness: 0,
-  });
-  ground = new THREE.Mesh(planeGeometry, planeMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.set(mapWidth / 2, 0, mapHeight / 2);
-  scene.add(ground);
-
-  const maxSize = Math.max(mapWidth, mapHeight);
-  gridHelper = new THREE.GridHelper(maxSize, Math.max(Math.floor(maxSize / 4), 1), 0x0f172a, 0x0f172a);
-  gridHelper.material.opacity = 0.25;
-  gridHelper.material.transparent = true;
-  gridHelper.scale.set(mapWidth / maxSize, 1, mapHeight / maxSize);
-  gridHelper.position.set(mapWidth / 2, 0.02, mapHeight / 2);
-  scene.add(gridHelper);
-}
-
-function configureCamera() {
-  const [mapWidth, mapHeight] = mapSize;
-  const aspect = canvas.clientWidth / canvas.clientHeight || 1;
-  const viewSize = Math.max(mapWidth, mapHeight) * 0.75;
-
-  camera.left = -viewSize * aspect;
-  camera.right = viewSize * aspect;
-  camera.top = viewSize;
-  camera.bottom = -viewSize;
-  camera.near = 0.1;
-  camera.far = 4000;
-
-  const centerX = mapWidth / 2;
-  const centerZ = mapHeight / 2;
-  const distance = Math.max(mapWidth, mapHeight) * 1.25;
-  const theta = Math.PI / 4;
-  const phi = THREE.MathUtils.degToRad(35);
-  const x = centerX + distance * Math.cos(phi) * Math.sin(theta);
-  const y = distance * Math.sin(phi);
-  const z = centerZ + distance * Math.cos(phi) * Math.cos(theta);
-
-  camera.position.set(x, y, z);
-  camera.up.set(0, 1, 0);
-  camera.lookAt(centerX, 0, centerZ);
-  camera.updateProjectionMatrix();
+  deviceRatio = ratio;
+  ctx.setTransform(deviceRatio, 0, 0, deviceRatio, 0, 0);
+  scaleX = width / mapSize[0];
+  scaleY = height / mapSize[1];
 }
 
 function openSocket(room, name) {
@@ -224,8 +148,7 @@ function openSocket(room, name) {
       const incomingSize = message.state.map_size;
       if (incomingSize[0] !== mapSize[0] || incomingSize[1] !== mapSize[1]) {
         mapSize = incomingSize;
-        initializeMapGeometry();
-        configureCamera();
+        resizeRendererToDisplaySize();
       } else {
         mapSize = incomingSize;
       }
@@ -389,210 +312,296 @@ function renderProductionButtons(selection) {
 }
 
 function pickEntityAtEvent(event) {
-  const pickables = [
-    ...unitMeshes.values(),
-    ...buildingMeshes.values(),
-    ...resourceMeshes.values(),
-  ];
-  if (pickables.length === 0) {
+  const point = screenToWorld(event.clientX, event.clientY);
+  if (!point) {
     return null;
   }
-  const rect = canvas.getBoundingClientRect();
-  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const intersections = raycaster.intersectObjects(pickables, false);
-  if (intersections.length === 0) {
-    return null;
-  }
-  const data = intersections[0].object.userData;
-  return data ? { ...data } : null;
+  return pickEntityAtPoint(point);
 }
 
 function getGroundPoint(event) {
-  if (!ground) return null;
+  return screenToWorld(event.clientX, event.clientY);
+}
+
+function screenToWorld(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
-  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  raycaster.setFromCamera(pointer, camera);
-  const intersection = raycaster.intersectObject(ground, false)[0];
-  if (!intersection) {
+  if (rect.width === 0 || rect.height === 0) {
     return null;
   }
+  const ratioX = (clientX - rect.left) / rect.width;
+  const ratioY = (clientY - rect.top) / rect.height;
   return {
-    x: THREE.MathUtils.clamp(intersection.point.x, 0, mapSize[0]),
-    y: THREE.MathUtils.clamp(intersection.point.z, 0, mapSize[1]),
+    x: clamp(ratioX * mapSize[0], 0, mapSize[0]),
+    y: clamp(ratioY * mapSize[1], 0, mapSize[1]),
   };
+}
+
+function pickEntityAtPoint(point) {
+  let candidate = null;
+  let bestScore = Infinity;
+
+  for (const building of buildings.values()) {
+    const score = distanceToBuilding(point, building);
+    if (score < bestScore) {
+      bestScore = score;
+      candidate = {
+        id: building.id,
+        owner: building.owner,
+        kind: "building",
+        type: building.type,
+        label: `${formatLabel(building.type)} (${building.hp}/${building.maxHp})`,
+      };
+    }
+  }
+
+  for (const unit of units.values()) {
+    const score = distanceToUnit(point, unit);
+    if (score < bestScore) {
+      bestScore = score;
+      candidate = {
+        id: unit.id,
+        owner: unit.owner,
+        kind: "unit",
+        type: unit.type,
+        label: `${formatLabel(unit.type)} (${unit.hp}/${unit.maxHp})`,
+      };
+    }
+  }
+
+  for (const resource of resources.values()) {
+    const score = distanceToResource(point, resource);
+    if (score < bestScore) {
+      bestScore = score;
+      candidate = {
+        id: resource.id,
+        owner: null,
+        kind: "resource",
+        type: "resource",
+        label: `Resource Field (${resource.remaining.toFixed(0)} credits)`,
+      };
+    }
+  }
+
+  if (bestScore === Infinity || bestScore > 0.8) {
+    return null;
+  }
+  return candidate;
+}
+
+function distanceToUnit(point, unit) {
+  const dx = point.x - unit.x;
+  const dy = point.y - unit.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const radius = unit.radius;
+  return Math.max(0, dist - radius);
+}
+
+function distanceToBuilding(point, building) {
+  const halfW = building.width / 2;
+  const halfD = building.depth / 2;
+  const dx = Math.abs(point.x - building.x) - halfW;
+  const dy = Math.abs(point.y - building.y) - halfD;
+  const clampedX = Math.max(dx, 0);
+  const clampedY = Math.max(dy, 0);
+  const outsideDist = Math.sqrt(clampedX * clampedX + clampedY * clampedY);
+  const insideDist = Math.max(dx, dy);
+  return dx <= 0 && dy <= 0 ? Math.max(insideDist, 0) : outsideDist;
+}
+
+function distanceToResource(point, resource) {
+  const dx = point.x - resource.x;
+  const dy = point.y - resource.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const radius = resource.radius ?? 3.0;
+  return Math.max(0, dist - radius);
 }
 
 function syncScene() {
   if (!gameState) return;
-  updateUnits();
-  updateBuildings();
-  updateResources();
-}
 
-function updateUnits() {
-  const seen = new Set();
+  const seenUnits = new Set();
   for (const unit of gameState.units) {
-    seen.add(unit.id);
-    let mesh = unitMeshes.get(unit.id);
-    if (!mesh) {
-      mesh = createUnitMesh(unit);
-      unitMeshes.set(unit.id, mesh);
-      scene.add(mesh);
-    }
-    updateUnitMesh(mesh, unit);
+    const [ux, uy] = unit.position;
+    const dimensions = getUnitDimensions(unit.type);
+    units.set(unit.id, {
+      id: unit.id,
+      owner: unit.owner,
+      type: unit.type,
+      x: ux,
+      y: uy,
+      hp: unit.hp,
+      maxHp: unit.max_hp,
+      radius: dimensions.radius,
+    });
+    seenUnits.add(unit.id);
   }
-  for (const [id, mesh] of unitMeshes.entries()) {
-    if (!seen.has(id)) {
-      disposeMesh(mesh);
-      unitMeshes.delete(id);
+  for (const id of Array.from(units.keys())) {
+    if (!seenUnits.has(id)) {
+      units.delete(id);
     }
   }
-}
 
-function updateBuildings() {
-  const seen = new Set();
+  const seenBuildings = new Set();
   for (const building of gameState.buildings) {
-    seen.add(building.id);
-    let mesh = buildingMeshes.get(building.id);
-    if (!mesh) {
-      mesh = createBuildingMesh(building);
-      buildingMeshes.set(building.id, mesh);
-      scene.add(mesh);
-    }
-    updateBuildingMesh(mesh, building);
+    const [bx, by] = building.position;
+    const dims = getBuildingDimensions(building.type);
+    buildings.set(building.id, {
+      id: building.id,
+      owner: building.owner,
+      type: building.type,
+      x: bx,
+      y: by,
+      hp: building.hp,
+      maxHp: building.max_hp,
+      width: dims.width,
+      depth: dims.depth,
+      queue: building.queue || [],
+    });
+    seenBuildings.add(building.id);
   }
-  for (const [id, mesh] of buildingMeshes.entries()) {
-    if (!seen.has(id)) {
-      disposeMesh(mesh);
-      buildingMeshes.delete(id);
+  for (const id of Array.from(buildings.keys())) {
+    if (!seenBuildings.has(id)) {
+      buildings.delete(id);
     }
   }
-}
 
-function updateResources() {
-  const seen = new Set();
+  const seenResources = new Set();
   for (const resource of gameState.resources) {
-    seen.add(resource.id);
-    let mesh = resourceMeshes.get(resource.id);
-    if (!mesh) {
-      mesh = createResourceMesh(resource);
-      resourceMeshes.set(resource.id, mesh);
-      scene.add(mesh);
+    const [rx, ry] = resource.position;
+    resources.set(resource.id, {
+      id: resource.id,
+      x: rx,
+      y: ry,
+      remaining: resource.remaining,
+      radius: 3.0,
+    });
+    seenResources.add(resource.id);
+  }
+  for (const id of Array.from(resources.keys())) {
+    if (!seenResources.has(id)) {
+      resources.delete(id);
     }
-    updateResourceMesh(mesh, resource);
   }
-  for (const [id, mesh] of resourceMeshes.entries()) {
-    if (!seen.has(id)) {
-      disposeMesh(mesh);
-      resourceMeshes.delete(id);
+}
+
+function drawScene() {
+  if (!ctx) return;
+  resizeRendererToDisplaySize();
+  const width = canvas.width / deviceRatio;
+  const height = canvas.height / deviceRatio;
+
+  ctx.save();
+  ctx.setTransform(deviceRatio, 0, 0, deviceRatio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  drawBackground(width, height);
+  drawGrid(width, height);
+  drawResources();
+  drawBuildings();
+  drawUnits();
+  ctx.restore();
+}
+
+function drawBackground(width, height) {
+  ctx.fillStyle = "#020617";
+  ctx.fillRect(0, 0, width, height);
+}
+
+function drawGrid(width, height) {
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.35)";
+  ctx.lineWidth = 1;
+  const stepX = Math.max(mapSize[0] / 16, 5);
+  const stepY = Math.max(mapSize[1] / 12, 5);
+  ctx.beginPath();
+  for (let x = stepX; x < mapSize[0]; x += stepX) {
+    const sx = x * scaleX;
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx, height);
+  }
+  for (let y = stepY; y < mapSize[1]; y += stepY) {
+    const sy = y * scaleY;
+    ctx.moveTo(0, sy);
+    ctx.lineTo(width, sy);
+  }
+  ctx.stroke();
+}
+
+function drawResources() {
+  for (const resource of resources.values()) {
+    const { x, y } = worldToScreen(resource.x, resource.y);
+    const radius = resource.radius * ((scaleX + scaleY) / 2);
+    ctx.beginPath();
+    ctx.fillStyle = COLORS.neutral;
+    ctx.globalAlpha = 0.8;
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawBuildings() {
+  for (const building of buildings.values()) {
+    const halfW = (building.width / 2) * scaleX;
+    const halfD = (building.depth / 2) * scaleY;
+    const { x, y } = worldToScreen(building.x, building.y);
+    ctx.fillStyle = getPlayerColor(building.owner);
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(x - halfW, y - halfD, halfW * 2, halfD * 2);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.strokeRect(x - halfW, y - halfD, halfW * 2, halfD * 2);
+
+    if (selectedBuilding && selectedBuilding.id === building.id) {
+      ctx.strokeStyle = selectionColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - halfW - 2, y - halfD - 2, halfW * 2 + 4, halfD * 2 + 4);
     }
+
+    drawHealthBar(x - halfW, y - halfD - 6, halfW * 2, building.hp, building.maxHp);
   }
 }
 
-function createUnitMesh(unit) {
-  const { radius, height, segments } = getUnitDimensions(unit.type);
-  const geometry = new THREE.CylinderGeometry(radius, radius, height, segments);
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(getPlayerColor(unit.owner)),
-    roughness: 0.4,
-    metalness: 0.2,
-    emissive: new THREE.Color(0x000000),
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = {
-    id: unit.id,
-    owner: unit.owner,
-    kind: "unit",
-    label: "",
-    type: unit.type,
+function drawUnits() {
+  for (const unit of units.values()) {
+    const { x, y } = worldToScreen(unit.x, unit.y);
+    const radius = unit.radius * ((scaleX + scaleY) / 2);
+    ctx.beginPath();
+    ctx.fillStyle = getPlayerColor(unit.owner);
+    ctx.globalAlpha = 0.95;
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (selectedUnits.has(unit.id)) {
+      ctx.beginPath();
+      ctx.strokeStyle = selectionColor;
+      ctx.lineWidth = 2;
+      ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    drawHealthBar(x - radius, y + radius + 4, radius * 2, unit.hp, unit.maxHp);
+  }
+}
+
+function drawHealthBar(x, y, width, hp, maxHp) {
+  const height = 4;
+  ctx.fillStyle = "rgba(15,23,42,0.8)";
+  ctx.fillRect(x, y, width, height);
+  const ratio = maxHp > 0 ? clamp(hp / maxHp, 0, 1) : 0;
+  ctx.fillStyle = ratio > 0.5 ? "#22c55e" : ratio > 0.25 ? "#fbbf24" : "#ef4444";
+  ctx.fillRect(x, y, width * ratio, height);
+}
+
+function worldToScreen(x, y) {
+  return {
+    x: x * scaleX,
+    y: y * scaleY,
   };
-  return mesh;
 }
 
-function updateUnitMesh(mesh, unit) {
-  const { height } = getUnitDimensions(unit.type);
-  const [ux, uy] = unit.position;
-  mesh.position.set(ux, height / 2, uy);
-  mesh.material.color.set(getPlayerColor(unit.owner));
-  mesh.userData.owner = unit.owner;
-  mesh.userData.type = unit.type;
-  mesh.userData.label = `${formatLabel(unit.type)} (${unit.hp}/${unit.max_hp})`;
-}
-
-function createBuildingMesh(building) {
-  const dimensions = getBuildingDimensions(building.type);
-  const geometry = new THREE.BoxGeometry(
-    dimensions.width,
-    dimensions.height,
-    dimensions.depth,
-  );
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(getPlayerColor(building.owner)),
-    roughness: 0.6,
-    metalness: 0.1,
-    emissive: new THREE.Color(0x000000),
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = {
-    id: building.id,
-    owner: building.owner,
-    kind: "building",
-    label: "",
-    type: building.type,
-  };
-  return mesh;
-}
-
-function updateBuildingMesh(mesh, building) {
-  const [bx, by] = building.position;
-  const dimensions = getBuildingDimensions(building.type);
-  mesh.position.set(bx, dimensions.height / 2, by);
-  mesh.material.color.set(getPlayerColor(building.owner));
-  mesh.userData.owner = building.owner;
-  mesh.userData.type = building.type;
-  mesh.userData.label = `${formatLabel(building.type)} (${building.hp}/${building.max_hp})`;
-}
-
-function createResourceMesh(resource) {
-  const geometry = new THREE.CylinderGeometry(2.2, 3, 1.5, 8);
-  const material = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(COLORS.neutral),
-    roughness: 0.9,
-    metalness: 0,
-  });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData = { id: resource.id, owner: null, kind: "resource", label: "" };
-  return mesh;
-}
-
-function updateResourceMesh(mesh, resource) {
-  const [rx, ry] = resource.position;
-  mesh.position.set(rx, 0.75, ry);
-  mesh.userData.label = `Resource Field (${resource.remaining.toFixed(0)} credits)`;
-}
-
-function disposeMesh(mesh) {
-  scene.remove(mesh);
-  mesh.geometry.dispose();
-  if (Array.isArray(mesh.material)) {
-    mesh.material.forEach((material) => material.dispose());
-  } else {
-    mesh.material.dispose();
-  }
-}
-
-function updateSelectionHighlights() {
-  for (const [id, mesh] of unitMeshes.entries()) {
-    const isSelected = selectedUnits.has(id);
-    mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
-  }
-  for (const [id, mesh] of buildingMeshes.entries()) {
-    const isSelected = selectedBuilding && selectedBuilding.id === id;
-    mesh.material.emissive.set(isSelected ? selectionColor : 0x000000);
-  }
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function getPlayerColor(owner) {
@@ -614,44 +623,44 @@ function formatLabel(identifier) {
 function getUnitDimensions(type) {
   switch (type) {
     case "ore_miner":
-      return { radius: 3.2, height: 3.0, segments: 18 };
+      return { radius: 3.2, height: 3.0 };
     case "grizzly_tank":
     case "mirage_tank":
-      return { radius: 3.0, height: 2.6, segments: 20 };
+      return { radius: 3.0, height: 2.6 };
     case "prism_tank":
-      return { radius: 3.2, height: 2.8, segments: 22 };
+      return { radius: 3.2, height: 2.8 };
     case "ifv":
-      return { radius: 2.4, height: 2.2, segments: 18 };
+      return { radius: 2.4, height: 2.2 };
     case "gi":
-      return { radius: 1.3, height: 2.0, segments: 12 };
+      return { radius: 1.3, height: 2.0 };
     case "rocketeer":
-      return { radius: 1.2, height: 2.2, segments: 12 };
+      return { radius: 1.2, height: 2.2 };
     case "conscript":
     case "engineer":
-      return { radius: 1.1, height: 1.8, segments: 12 };
+      return { radius: 1.1, height: 1.8 };
     default:
-      return { radius: 1.6, height: 1.8, segments: 12 };
+      return { radius: 1.6, height: 1.8 };
   }
 }
 
 function getBuildingDimensions(type) {
   switch (type) {
     case "construction_yard":
-      return { width: 12, height: 8, depth: 12 };
+      return { width: 12, depth: 12 };
     case "war_factory":
-      return { width: 14, height: 7, depth: 10 };
+      return { width: 14, depth: 10 };
     case "barracks":
-      return { width: 9, height: 6, depth: 9 };
+      return { width: 9, depth: 9 };
     case "ore_refinery":
-      return { width: 10, height: 6, depth: 10 };
+      return { width: 10, depth: 10 };
     case "power_plant":
-      return { width: 8, height: 7, depth: 8 };
+      return { width: 8, depth: 8 };
     case "airforce_command":
-      return { width: 11, height: 7, depth: 11 };
+      return { width: 11, depth: 11 };
     case "prism_tower":
-      return { width: 4, height: 12, depth: 4 };
+      return { width: 4, depth: 4 };
     default:
-      return { width: 8, height: 6, depth: 8 };
+      return { width: 8, depth: 8 };
   }
 }
 
