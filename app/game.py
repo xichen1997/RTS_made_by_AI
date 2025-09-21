@@ -8,6 +8,8 @@ from collections import deque
 from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
 from . import config
+from .ecs import CombatStats, Movement, Orders, Position, UnitLink, World
+from .ecs.systems import CombatSystem, MovementSystem
 from .models import (
     Building,
     Entity,
@@ -40,6 +42,10 @@ class RTSGame:
         self.time_accumulator: float = 0.0
         self.events: Deque[str] = deque(maxlen=50)
         self.command_queue: Deque[Tuple[str, Dict]] = deque()
+        self.ecs_world = World()
+        self.unit_entities: Dict[str, int] = {}
+        self.movement_system = MovementSystem(self)
+        self.combat_system = CombatSystem(self)
         self._spawn_resources()
 
     # ------------------------------------------------------------------
@@ -68,6 +74,7 @@ class RTSGame:
         if not player:
             return
         for unit_id in list(player.units):
+            self._unregister_unit(unit_id)
             self.units.pop(unit_id, None)
         for building_id in list(player.buildings):
             self.buildings.pop(building_id, None)
@@ -109,6 +116,7 @@ class RTSGame:
             unit.target_position = destination.copy()
             unit.target_entity_id = None
             unit.state = "moving"
+            self._update_orders_component(unit)
 
     def _handle_attack(self, player: PlayerState, command: Dict) -> None:
         target_id = command.get("target_id")
@@ -124,6 +132,7 @@ class RTSGame:
             unit.target_entity_id = target_id
             unit.target_position = target.position.copy()
             unit.state = "attack"
+            self._update_orders_component(unit)
 
     def _handle_harvest(self, player: PlayerState, command: Dict) -> None:
         node_id = command.get("resource_id")
@@ -138,6 +147,7 @@ class RTSGame:
             unit.state = "harvest"
             unit.target_entity_id = node_id
             unit.target_position = destination
+            self._update_orders_component(unit)
 
     def _handle_build_unit(self, player: PlayerState, command: Dict) -> None:
         building_id = command.get("building_id")
@@ -198,29 +208,23 @@ class RTSGame:
                 owner = self.players.get(unit.owner_id)
                 if owner:
                     owner.units.pop(unit.id, None)
+                self._unregister_unit(unit.id)
                 self.units.pop(unit.id, None)
                 self.add_event(f"{self._format_name(unit.kind)} destroyed")
                 continue
 
-            if unit.state == "moving" and unit.target_position:
-                unit.position.move_towards(unit.target_position, unit.speed * dt)
-                if unit.position.distance_to(unit.target_position) <= 0.5:
-                    unit.reset_orders()
-            elif unit.state == "attack" and unit.target_entity_id:
-                target = self.units.get(unit.target_entity_id) or self.buildings.get(
-                    unit.target_entity_id
-                )
-                if not target or not target.is_alive():
-                    unit.reset_orders()
-                    continue
-                self._attack_target(unit, target, dt)
-            elif unit.state == "harvest" and unit.target_entity_id:
+        self.movement_system.update(self.ecs_world, dt)
+        self.combat_system.update(self.ecs_world, dt)
+
+        for unit in list(self.units.values()):
+            if unit.state == "harvest" and unit.target_entity_id:
                 node = self.resource_nodes.get(unit.target_entity_id)
                 if not node:
                     unit.reset_orders()
+                    self._update_orders_component(unit)
                     continue
                 self._harvest_node(unit, node, dt)
-            else:
+            elif unit.state == "idle":
                 # Opportunistic targeting: engage closest enemy in range.
                 self._seek_and_attack(unit, dt)
 
@@ -232,6 +236,7 @@ class RTSGame:
         gathered = node.harvest(config.HARVEST_RATE_PER_SECOND * dt)
         if gathered <= 0:
             unit.reset_orders()
+            self._update_orders_component(unit)
             self.add_event("A resource field has been depleted.")
             return
         owner = self.players.get(unit.owner_id)
@@ -241,6 +246,7 @@ class RTSGame:
     def _attack_target(self, unit: Unit, target: Entity, dt: float) -> None:
         if unit.attack_damage <= 0:
             unit.reset_orders()
+            self._update_orders_component(unit)
             return
         distance = unit.position.distance_to(target.position)
         if distance > unit.attack_range:
@@ -249,14 +255,17 @@ class RTSGame:
             return
         if unit.current_cooldown > 0:
             unit.current_cooldown -= dt
+            self._update_combat_component(unit)
             return
         target.take_damage(unit.attack_damage)
         unit.current_cooldown = unit.attack_cooldown
+        self._update_combat_component(unit)
         if not target.is_alive():
             if isinstance(target, Unit):
                 target_owner = self.players.get(target.owner_id)
                 if target_owner:
                     target_owner.units.pop(target.id, None)
+                self._unregister_unit(target.id)
                 self.units.pop(target.id, None)
             elif isinstance(target, Building):
                 target_owner = self.players.get(target.owner_id)
@@ -268,6 +277,7 @@ class RTSGame:
                     f"{self._format_name(target.kind)} belonging to {owner_name} destroyed!"
                 )
             unit.reset_orders()
+            self._update_orders_component(unit)
 
     def _seek_and_attack(self, unit: Unit, dt: float) -> None:
         if unit.attack_damage <= 0:
@@ -279,6 +289,7 @@ class RTSGame:
         unit.target_entity_id = enemy.id
         unit.target_position = enemy.position.copy()
         self._attack_target(unit, enemy, dt)
+        self._update_orders_component(unit)
 
     def _find_closest_enemy(self, unit: Unit) -> Optional[Entity]:
         candidates: Iterable[Entity] = itertools.chain(
@@ -438,7 +449,63 @@ class RTSGame:
             attack_cooldown=stats["attack_cooldown"],
             role=stats.get("role", "combat"),
         )
+        self._register_unit(unit)
         return unit
+
+    # ------------------------------------------------------------------
+    # ECS helpers
+    # ------------------------------------------------------------------
+    def _register_unit(self, unit: Unit) -> None:
+        if unit.id in self.unit_entities:
+            return
+        entity_id = self.ecs_world.create_entity()
+        self.unit_entities[unit.id] = entity_id
+        self.ecs_world.add_component(entity_id, UnitLink(unit_id=unit.id))
+        self.ecs_world.add_component(entity_id, Position(unit.position))
+        self.ecs_world.add_component(entity_id, Movement(speed=unit.speed))
+        self.ecs_world.add_component(
+            entity_id,
+            Orders(
+                state=unit.state,
+                target_position=unit.target_position.copy() if unit.target_position else None,
+                target_entity_id=unit.target_entity_id,
+            ),
+        )
+        self.ecs_world.add_component(
+            entity_id,
+            CombatStats(
+                damage=unit.attack_damage,
+                attack_range=unit.attack_range,
+                cooldown=unit.attack_cooldown,
+                current_cooldown=unit.current_cooldown,
+            ),
+        )
+
+    def _unregister_unit(self, unit_id: str) -> None:
+        entity_id = self.unit_entities.pop(unit_id, None)
+        if entity_id is None:
+            return
+        self.ecs_world.remove_entity(entity_id)
+
+    def _update_orders_component(self, unit: Unit) -> None:
+        entity_id = self.unit_entities.get(unit.id)
+        if entity_id is None:
+            return
+        orders = self.ecs_world.get_component(entity_id, Orders)
+        if not orders:
+            return
+        orders.state = unit.state
+        orders.target_entity_id = unit.target_entity_id
+        orders.target_position = unit.target_position.copy() if unit.target_position else None
+
+    def _update_combat_component(self, unit: Unit) -> None:
+        entity_id = self.unit_entities.get(unit.id)
+        if entity_id is None:
+            return
+        combat = self.ecs_world.get_component(entity_id, CombatStats)
+        if not combat:
+            return
+        combat.current_cooldown = unit.current_cooldown
 
     def add_event(self, message: str) -> None:
         self.events.append(message)
