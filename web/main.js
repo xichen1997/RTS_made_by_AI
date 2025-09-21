@@ -1,35 +1,28 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
 
-const canvas = document.getElementById("battlefield");
-const connectBtn = document.getElementById("connect-btn");
-const roomInput = document.getElementById("room-input");
-const nameInput = document.getElementById("name-input");
-const statusLabel = document.getElementById("status-indicator");
-const resourceDisplay = document.getElementById("resource-display");
-const eventLog = document.getElementById("event-log");
-const tooltip = document.getElementById("tooltip");
-const productionButtonsContainer = document.getElementById("production-buttons");
-const productionHint = document.getElementById("production-hint");
+let canvas = null;
+let connectBtn = null;
+let roomInput = null;
+let nameInput = null;
+let statusLabel = null;
+let resourceDisplay = null;
+let eventLog = null;
+let tooltip = null;
+let productionButtonsContainer = null;
+let productionHint = null;
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+let renderer = null;
+let scene = null;
+let camera = null;
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x020617);
-
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-sun.position.set(100, 200, 100);
-scene.add(sun);
 
 const pointer = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 
 let socket = null;
 let playerId = null;
-let roomId = roomInput.value;
+let roomId = "alpha";
 let playerColor = "#ffffff";
 let gameState = null;
 let selectedUnits = new Set();
@@ -50,7 +43,7 @@ const COLORS = {
   neutral: "#facc15",
 };
 
-const BASE_PRODUCTION_HINT = productionHint ? productionHint.textContent : "";
+let baseProductionHint = "";
 
 const PRODUCTION_LABELS = {
   engineer: "Mobilize Engineer",
@@ -64,67 +57,128 @@ const PRODUCTION_LABELS = {
   prism_tank: "Construct Prism Tank",
 };
 
-initializeMapGeometry();
-resizeRendererToDisplaySize();
-configureCamera();
-animate();
-renderProductionButtons(null);
-
-connectBtn.addEventListener("click", () => {
-  if (socket) {
-    socket.close();
-  }
-  roomId = roomInput.value.trim() || "alpha";
-  const name = nameInput.value.trim() || `Commander-${Math.floor(Math.random() * 999)}`;
-  openSocket(roomId, name);
-});
-
-canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-
-canvas.addEventListener("mousedown", (event) => {
-  if (!gameState) {
+function initializeClient() {
+  if (renderer) {
     return;
   }
-  const picked = pickEntityAtEvent(event);
-  if (event.button === 0) {
-    handleSelection(picked, event.shiftKey);
-  } else if (event.button === 2) {
-    const groundPoint = getGroundPoint(event);
-    handleCommand(picked, groundPoint);
+
+  canvas = document.getElementById("battlefield");
+  connectBtn = document.getElementById("connect-btn");
+  roomInput = document.getElementById("room-input");
+  nameInput = document.getElementById("name-input");
+  statusLabel = document.getElementById("status-indicator");
+  resourceDisplay = document.getElementById("resource-display");
+  eventLog = document.getElementById("event-log");
+  tooltip = document.getElementById("tooltip");
+  productionButtonsContainer = document.getElementById("production-buttons");
+  productionHint = document.getElementById("production-hint");
+
+  roomId = roomInput.value.trim() || roomId;
+
+  const required = {
+    canvas,
+    connectBtn,
+    roomInput,
+    nameInput,
+    statusLabel,
+    resourceDisplay,
+    eventLog,
+    tooltip,
+  };
+  const missing = Object.entries(required)
+    .filter(([, element]) => !element)
+    .map(([key]) => key);
+  if (missing.length > 0) {
+    console.error(
+      `Unable to initialise client UI. Missing elements: ${missing.join(", ")}`,
+    );
+    return;
   }
-});
 
-canvas.addEventListener("mousemove", (event) => {
-  if (!gameState) return;
-  const hovered = pickEntityAtEvent(event);
-  if (hovered && hovered.id !== lastHover) {
-    tooltip.textContent = hovered.label;
-    tooltip.style.opacity = 1;
-    lastHover = hovered.id;
-  } else if (!hovered) {
-    tooltip.style.opacity = 0;
-    lastHover = null;
-  }
-});
+  baseProductionHint = productionHint ? productionHint.textContent || "" : "";
 
-canvas.addEventListener("mouseleave", () => {
-  tooltip.style.opacity = 0;
-  lastHover = null;
-});
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
 
-window.addEventListener("resize", () => {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x020617);
+  camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  sun.position.set(100, 200, 100);
+  scene.add(sun);
+
+  initializeMapGeometry();
   resizeRendererToDisplaySize();
   configureCamera();
-});
+  animate();
+  renderProductionButtons(null);
+
+  connectBtn.addEventListener("click", () => {
+    if (socket) {
+      socket.close();
+    }
+    roomId = roomInput.value.trim() || "alpha";
+    const name =
+      nameInput.value.trim() || `Commander-${Math.floor(Math.random() * 999)}`;
+    openSocket(roomId, name);
+  });
+
+  canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  canvas.addEventListener("mousedown", (event) => {
+    if (!gameState) {
+      return;
+    }
+    const picked = pickEntityAtEvent(event);
+    if (event.button === 0) {
+      handleSelection(picked, event.shiftKey);
+    } else if (event.button === 2) {
+      const groundPoint = getGroundPoint(event);
+      handleCommand(picked, groundPoint);
+    }
+  });
+
+  canvas.addEventListener("mousemove", (event) => {
+    if (!gameState) return;
+    const hovered = pickEntityAtEvent(event);
+    if (hovered && hovered.id !== lastHover) {
+      tooltip.textContent = hovered.label;
+      tooltip.style.opacity = 1;
+      lastHover = hovered.id;
+    } else if (!hovered) {
+      tooltip.style.opacity = 0;
+      lastHover = null;
+    }
+  });
+
+  canvas.addEventListener("mouseleave", () => {
+    tooltip.style.opacity = 0;
+    lastHover = null;
+  });
+
+  window.addEventListener("resize", () => {
+    resizeRendererToDisplaySize();
+    configureCamera();
+  });
+}
+
+window.addEventListener("DOMContentLoaded", initializeClient);
 
 function animate() {
   requestAnimationFrame(animate);
+  if (!renderer || !scene || !camera) {
+    return;
+  }
   resizeRendererToDisplaySize();
   updateSelectionHighlights();
   renderer.render(scene, camera);
 }
 
 function resizeRendererToDisplaySize() {
+  if (!renderer || !canvas) {
+    return;
+  }
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
   const pixelRatio = Math.min(window.devicePixelRatio, 2);
@@ -138,6 +192,9 @@ function resizeRendererToDisplaySize() {
 }
 
 function initializeMapGeometry() {
+  if (!scene) {
+    return;
+  }
   if (ground) {
     scene.remove(ground);
     ground.geometry.dispose();
@@ -178,6 +235,9 @@ function initializeMapGeometry() {
 }
 
 function configureCamera() {
+  if (!camera || !canvas) {
+    return;
+  }
   const [mapWidth, mapHeight] = mapSize;
   const aspect = canvas.clientWidth / canvas.clientHeight || 1;
   const viewSize = Math.max(mapWidth, mapHeight) * 0.75;
@@ -339,7 +399,7 @@ function renderProductionButtons(selection) {
   if (!productionButtonsContainer || !productionHint) return;
   productionButtonsContainer.innerHTML = "";
   if (!selection) {
-    productionHint.textContent = BASE_PRODUCTION_HINT;
+    productionHint.textContent = baseProductionHint;
     return;
   }
   if (!gameState) {
@@ -348,7 +408,7 @@ function renderProductionButtons(selection) {
   }
   const buildingData = gameState.buildings.find((building) => building.id === selection.id);
   if (!buildingData) {
-    productionHint.textContent = BASE_PRODUCTION_HINT;
+    productionHint.textContent = baseProductionHint;
     return;
   }
   const buildableUnits = buildingData.buildable_units || [];
@@ -389,6 +449,9 @@ function renderProductionButtons(selection) {
 }
 
 function pickEntityAtEvent(event) {
+  if (!canvas || !camera) {
+    return null;
+  }
   const pickables = [
     ...unitMeshes.values(),
     ...buildingMeshes.values(),
@@ -410,7 +473,7 @@ function pickEntityAtEvent(event) {
 }
 
 function getGroundPoint(event) {
-  if (!ground) return null;
+  if (!ground || !canvas || !camera) return null;
   const rect = canvas.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -426,7 +489,7 @@ function getGroundPoint(event) {
 }
 
 function syncScene() {
-  if (!gameState) return;
+  if (!gameState || !scene) return;
   updateUnits();
   updateBuildings();
   updateResources();
